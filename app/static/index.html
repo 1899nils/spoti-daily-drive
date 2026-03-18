@@ -201,8 +201,29 @@
   <div class="login-box">
     <div style="font-size:3rem;margin-bottom:.5rem">🎵</div>
     <h1>Daily Drive</h1>
-    <p>Verbinde dich mit Spotify, um deine personalisierte Daily Drive Playlist zu erstellen.</p>
-    <a href="/auth/login" class="btn" style="display:inline-block;text-decoration:none">Mit Spotify anmelden</a>
+
+    <div id="login-step1">
+      <p>Verbinde dich mit Spotify, um deine personalisierte Daily Drive Playlist zu erstellen.</p>
+      <button class="btn" onclick="startSpotifyLogin()">Mit Spotify anmelden</button>
+    </div>
+
+    <div id="login-step2" style="display:none">
+      <p style="margin-bottom:.75rem">
+        <strong>1.</strong> Öffne den Link und melde dich bei Spotify an:<br>
+        <a id="spotify-auth-link" href="#" target="_blank" rel="noopener"
+           style="color:var(--accent);word-break:break-all;font-size:.85rem">Link wird geladen…</a>
+      </p>
+      <p style="margin-bottom:.75rem">
+        <strong>2.</strong> Nach dem Login leitet Spotify auf eine Seite weiter, die nicht lädt –
+        das ist normal. Kopiere die vollständige URL aus der Adresszeile.
+      </p>
+      <p style="margin-bottom:.5rem"><strong>3.</strong> Füge die URL hier ein:</p>
+      <input id="callback-url-input" type="text"
+             placeholder="http://localhost:787/auth/callback?code=..."
+             style="width:100%;box-sizing:border-box;padding:.6rem .75rem;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:.85rem;margin-bottom:.75rem">
+      <button class="btn" onclick="submitCallbackUrl()">Anmelden</button>
+      <p id="login-error" style="color:#e05;margin-top:.5rem;display:none"></p>
+    </div>
   </div>
 </div>
 
@@ -354,6 +375,39 @@ function updateRatioBars() {
   const rec = parseInt(document.getElementById('rec-ratio').value);
   document.getElementById('bar-top').style.width = top + '%';
   document.getElementById('bar-rec').style.width = rec + '%';
+}
+
+// ── Spotify Login (Manual Code Flow) ─────────────────────────────────────────
+
+async function startSpotifyLogin() {
+  const data = await fetch('/auth/url').then(r => r.json());
+  document.getElementById('spotify-auth-link').href = data.url;
+  document.getElementById('spotify-auth-link').textContent = data.url;
+  document.getElementById('login-step1').style.display = 'none';
+  document.getElementById('login-step2').style.display = 'block';
+}
+
+async function submitCallbackUrl() {
+  const raw = document.getElementById('callback-url-input').value.trim();
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+  let code;
+  try {
+    const url = new URL(raw);
+    code = url.searchParams.get('code');
+  } catch (_) { code = null; }
+  if (!code) {
+    errEl.textContent = 'Keine gültige Callback-URL. Bitte die vollständige URL aus der Adresszeile einfügen.';
+    errEl.style.display = 'block';
+    return;
+  }
+  const res = await fetch(`/auth/callback?code=${encodeURIComponent(code)}`);
+  if (res.ok || res.redirected) {
+    location.reload();
+  } else {
+    errEl.textContent = 'Login fehlgeschlagen. Bitte erneut versuchen.';
+    errEl.style.display = 'block';
+  }
 }
 
 // ── Load Status & Settings ───────────────────────────────────────────────────

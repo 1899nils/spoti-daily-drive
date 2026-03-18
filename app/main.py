@@ -51,6 +51,11 @@ async def auth_login():
     return RedirectResponse(get_auth_url())
 
 
+@app.get("/auth/url")
+async def auth_url():
+    return {"url": get_auth_url()}
+
+
 @app.get("/auth/callback")
 async def auth_callback(code: str = Query(...)):
     try:
