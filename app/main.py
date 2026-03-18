@@ -106,6 +106,14 @@ async def update_settings(body: dict[str, Any]):
 
 # ── stats.fm ─────────────────────────────────────────────────────────────────
 
+@app.get("/api/statsfm/resolve")
+async def statsfm_resolve(username: str = Query(..., min_length=1)):
+    result = await asyncio.to_thread(sfm_api.resolve_username, username)
+    if result is None:
+        return {"ok": False}
+    return {"ok": True, "customId": result["customId"], "displayName": result["displayName"]}
+
+
 @app.get("/api/statsfm/status")
 async def statsfm_status():
     config = load_config()

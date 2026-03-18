@@ -319,13 +319,13 @@
     <p class="statsfm-hint">
       Verbinde deinen <a href="https://stats.fm" target="_blank">stats.fm</a>-Account, um die Playlist auf Basis
       deiner echten Hörstatistiken (Play-Counts, Hörzeit) zu erstellen — präziser als Spotifys eigenes Ranking.<br>
-      Deine User-ID findest du in der URL: <strong>stats.fm/<em>DEINE_ID</em></strong>
+      Deinen Nutzernamen findest du in der URL: <strong>stats.fm/<em>DEIN_NAME</em></strong>
     </p>
 
     <div class="setting-row" style="margin-top:.9rem">
-      <label>User-ID</label>
+      <label>Nutzername</label>
       <div style="display:flex;gap:.5rem">
-        <input type="text" id="sfm-user-id" placeholder="z.B. 1d0oe6e1gtdfgtntg2jn6g5kt" autocomplete="off" style="flex:1" />
+        <input type="text" id="sfm-user-id" placeholder="dein stats.fm Profilname" autocomplete="off" style="flex:1" />
         <button class="btn btn-outline" onclick="connectStatsfm()">Verbinden</button>
       </div>
     </div>
@@ -624,32 +624,35 @@ async function loadStatsfmStatus() {
 }
 
 async function connectStatsfm() {
-  const userId = document.getElementById('sfm-user-id').value.trim();
-  if (!userId) return;
+  const username = document.getElementById('sfm-user-id').value.trim();
+  if (!username) return;
 
   const statusEl = document.getElementById('sfm-status');
   const dot = document.getElementById('sfm-dot');
   const text = document.getElementById('sfm-status-text');
   statusEl.style.display = 'flex';
   dot.className = 'dot dot-grey';
-  text.innerHTML = '<span class="spinner"></span>Verbinde…';
+  text.innerHTML = '<span class="spinner"></span>Suche Nutzer…';
 
-  // Save user ID
+  // Resolve username → customId
+  const resolve = await fetch('/api/statsfm/resolve?username=' + encodeURIComponent(username))
+    .then(r => r.json()).catch(() => null);
+
+  if (!resolve || !resolve.ok) {
+    dot.className = 'dot dot-grey';
+    text.textContent = 'Nutzername nicht gefunden';
+    return;
+  }
+
+  // Save resolved customId
   await fetch('/api/settings', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ statsfm_user_id: userId }),
+    body: JSON.stringify({ statsfm_user_id: resolve.customId }),
   });
 
-  // Verify via status endpoint
-  const data = await fetch('/api/statsfm/status').then(r => r.json()).catch(() => null);
-  if (data && data.connected) {
-    dot.className = 'dot dot-green';
-    text.textContent = 'Verbunden als ' + userId;
-  } else {
-    dot.className = 'dot dot-grey';
-    text.textContent = 'Verbindung fehlgeschlagen — User-ID prüfen';
-  }
+  dot.className = 'dot dot-green';
+  text.textContent = 'Verbunden als ' + resolve.displayName;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
