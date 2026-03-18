@@ -5,7 +5,7 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "./data"))
-CACHE_PATH = DATA_DIR / ".cache"
+CACHE_PATH = DATA_DIR / "spotify_token.json"
 
 SCOPES = " ".join([
     "user-top-read",

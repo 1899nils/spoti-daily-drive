@@ -9,36 +9,53 @@ import httpx
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.stats.fm/api/v1"
-_SEARCH_URL = "https://api.stats.fm/api/search"
 _TIMEOUT = 10.0
+_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; spoti-daily-drive/1.0)",
+    "Accept": "application/json",
+}
 
 
 def resolve_username(username: str) -> Optional[dict]:
     """Resolve a stats.fm profile name to a customId.
 
-    Tries direct lookup first, then falls back to the search API.
+    Tries direct lookup first, then falls back to the v1 search API.
     Returns {"customId": "...", "displayName": "..."} or None.
     """
     try:
-        with httpx.Client(timeout=_TIMEOUT) as client:
+        with httpx.Client(timeout=_TIMEOUT, headers=_HEADERS) as client:
             # Step 1: direct lookup (works when username IS the customId)
             r = client.get(f"{BASE_URL}/users/{username}")
+            logger.info("stats.fm direct lookup %s → %s", username, r.status_code)
             if r.status_code == 200:
-                data = r.json().get("item", r.json())
+                body = r.json()
+                data = body.get("item") or body
                 custom_id = data.get("customId") or username
                 display_name = data.get("displayName") or username
                 return {"customId": custom_id, "displayName": display_name}
+            else:
+                logger.warning("stats.fm direct lookup failed: %s %s", r.status_code, r.text[:200])
 
-            # Step 2: search API fallback
-            r = client.get(_SEARCH_URL, params={"query": username, "type": "user"})
+            # Step 2: search API fallback (v1 endpoint)
+            r = client.get(
+                f"{BASE_URL}/search",
+                params={"query": username, "type": "user"},
+            )
+            logger.info("stats.fm search %s → %s", username, r.status_code)
             if r.status_code == 200:
-                users = r.json().get("items", {}).get("users", [])
+                body = r.json()
+                # Response can be {"items": {"users": [...]}} or {"items": [...]}
+                items = body.get("items", {})
+                users = items.get("users", []) if isinstance(items, dict) else items
+                logger.info("stats.fm search returned %d users", len(users))
                 if users:
                     u = users[0]
                     return {
                         "customId": u.get("customId") or u.get("id") or username,
                         "displayName": u.get("displayName") or username,
                     }
+            else:
+                logger.warning("stats.fm search failed: %s %s", r.status_code, r.text[:200])
         return None
     except Exception as exc:
         logger.warning("stats.fm resolve_username error: %s", exc)
@@ -48,7 +65,7 @@ def resolve_username(username: str) -> Optional[dict]:
 def validate_user_id(user_id: str) -> Optional[dict]:
     """Return a minimal user dict if the user_id is valid, else None."""
     try:
-        with httpx.Client(timeout=_TIMEOUT) as client:
+        with httpx.Client(timeout=_TIMEOUT, headers=_HEADERS) as client:
             r = client.get(
                 f"{BASE_URL}/users/{user_id}/top/tracks",
                 params={"range": "weeks", "limit": 1},
@@ -71,7 +88,7 @@ def get_top_tracks(
     range: 'weeks' | 'months' | 'lifetime'
     """
     try:
-        with httpx.Client(timeout=_TIMEOUT) as client:
+        with httpx.Client(timeout=_TIMEOUT, headers=_HEADERS) as client:
             r = client.get(
                 f"{BASE_URL}/users/{user_id}/top/tracks",
                 params={"range": range, "limit": limit},
