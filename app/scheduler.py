@@ -23,22 +23,23 @@ def _run_build() -> None:
         logger.error("Scheduler: build failed — %s", result.get("error"))
 
 
-def schedule_daily(time_str: str) -> None:
-    """Schedule (or reschedule) the daily build at HH:MM."""
-    hour, minute = (int(x) for x in time_str.split(":"))
+def schedule_all(times: list[str]) -> None:
+    """Replace all scheduled builds with jobs for each HH:MM in times."""
     scheduler.remove_all_jobs()
-    scheduler.add_job(
-        _run_build,
-        CronTrigger(hour=hour, minute=minute),
-        id="daily_build",
-        replace_existing=True,
-        misfire_grace_time=3600,  # Job noch ausführen wenn Container bis zu 1h zu spät startet
-    )
-    logger.info("Scheduler: daily build set for %02d:%02d", hour, minute)
+    for i, time_str in enumerate(times):
+        hour, minute = (int(x) for x in time_str.split(":"))
+        scheduler.add_job(
+            _run_build,
+            CronTrigger(hour=hour, minute=minute),
+            id=f"daily_build_{i}",
+            replace_existing=True,
+            misfire_grace_time=3600,
+        )
+        logger.info("Scheduler: build scheduled at %02d:%02d", hour, minute)
 
 
 def start_scheduler() -> None:
     config = load_config()
-    schedule_daily(config.get("schedule_time", "06:00"))
+    schedule_all(config.get("schedule_times", ["06:00"]))
     if not scheduler.running:
         scheduler.start()

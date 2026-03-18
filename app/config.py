@@ -12,11 +12,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "top_tracks_ratio": 0.4,
     "recommendations_ratio": 0.4,
     "podcast_episodes": 4,
-    "schedule_time": "06:00",
+    "schedule_times": ["06:00"],
     "selected_podcasts": [],
     "playlist_id": None,
     "last_build": None,
     "statsfm_user_id": None,
+    "statsfm_display_name": None,
 }
 
 
@@ -28,7 +29,12 @@ def load_config() -> dict[str, Any]:
     with open(CONFIG_FILE) as f:
         data = json.load(f)
     # Merge with defaults to handle missing keys after updates
-    return {**DEFAULT_CONFIG, **data}
+    merged = {**DEFAULT_CONFIG, **data}
+    # Migrate old single schedule_time to schedule_times array
+    if "schedule_time" in merged and "schedule_times" not in data:
+        merged["schedule_times"] = [merged["schedule_time"]]
+    merged.pop("schedule_time", None)
+    return merged
 
 
 def save_config(config: dict[str, Any]) -> None:
