@@ -339,6 +339,23 @@
     </div>
   </div>
 
+  <!-- Excluded Artists -->
+  <div class="card">
+    <h2>Künstler sperren</h2>
+    <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:.9rem">
+      Tracks von gesperrten Künstlern werden beim Build automatisch aus der Playlist entfernt.
+    </p>
+    <div class="search-row">
+      <input type="text" id="artist-query" placeholder="Künstler suchen…" onkeydown="if(event.key==='Enter')searchArtists()" />
+      <button class="btn" onclick="searchArtists()">Suchen</button>
+    </div>
+    <div id="artist-search-results" class="show-list"></div>
+
+    <div class="section-divider" id="excluded-divider" style="display:none"></div>
+    <div id="excluded-artists-label" style="display:none;font-size:.8rem;color:var(--text-muted);margin-bottom:.5rem">Gesperrt</div>
+    <div id="excluded-artists-list" class="show-list"></div>
+  </div>
+
   <!-- Podcast Selection -->
   <div class="card">
     <h2>Podcasts auswählen</h2>
@@ -356,6 +373,7 @@
 
 <script>
 let selectedPodcasts = [];
+let excludedArtists = [];
 let settings = {};
 
 // ── Ratios ──────────────────────────────────────────────────────────────────
@@ -431,6 +449,7 @@ async function init() {
   await loadSettings();
   await loadStatus();
   await loadSelectedPodcasts();
+  await loadExcludedArtists();
   loadStatsfmStatus();
 }
 
@@ -507,6 +526,105 @@ function showBuildStatus(msg, type) {
   el.className = 'build-status ' + type;
   el.textContent = msg;
   setTimeout(() => el.textContent = '', 3000);
+}
+
+// ── Excluded Artists ─────────────────────────────────────────────────────────
+
+async function loadExcludedArtists() {
+  const data = await fetch('/api/excluded-artists').then(r => r.json());
+  excludedArtists = data.artists || [];
+  renderExcludedArtists();
+}
+
+function renderExcludedArtists() {
+  const list = document.getElementById('excluded-artists-list');
+  const divider = document.getElementById('excluded-divider');
+  const label = document.getElementById('excluded-artists-label');
+  list.innerHTML = '';
+  if (!excludedArtists.length) {
+    divider.style.display = 'none';
+    label.style.display = 'none';
+    return;
+  }
+  divider.style.display = '';
+  label.style.display = '';
+  for (const artist of excludedArtists) {
+    const item = document.createElement('div');
+    item.className = 'show-item';
+    item.innerHTML = `
+      <img src="${esc(artist.image_url || '')}" alt="" onerror="this.style.display='none'" />
+      <div class="show-info">
+        <div class="show-name">${esc(artist.name)}</div>
+        <div class="show-pub">${esc(artist.genres || '')}</div>
+      </div>
+      <button class="btn btn-outline" onclick="removeExcludedArtist('${esc(artist.id)}')">Entfernen</button>`;
+    list.appendChild(item);
+  }
+}
+
+async function saveExcludedArtists() {
+  await fetch('/api/excluded-artists', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ artists: excludedArtists }),
+  });
+}
+
+async function searchArtists() {
+  const q = document.getElementById('artist-query').value.trim();
+  if (!q) return;
+  const container = document.getElementById('artist-search-results');
+  container.innerHTML = '<span class="spinner"></span>';
+  const data = await fetch('/api/artists/search?q=' + encodeURIComponent(q)).then(r => r.json());
+  const artists = data.artists || [];
+  if (!artists.length) {
+    container.innerHTML = '<p class="no-results">Keine Ergebnisse gefunden.</p>';
+    return;
+  }
+  container.innerHTML = '';
+  for (const artist of artists) {
+    const alreadyBlocked = excludedArtists.some(a => a.id === artist.id);
+    const item = document.createElement('div');
+    item.className = 'show-item';
+    item.dataset.artistJson = JSON.stringify(artist);
+    item.innerHTML = `
+      <img src="${esc(artist.image_url || '')}" alt="" onerror="this.style.display='none'" />
+      <div class="show-info">
+        <div class="show-name">${esc(artist.name)}</div>
+        <div class="show-pub">${esc(artist.genres || '')}</div>
+      </div>
+      <button class="btn btn-outline">${alreadyBlocked ? 'Entsperren' : 'Sperren'}</button>`;
+    item.querySelector('button').addEventListener('click', function() {
+      toggleExcludedArtist(item.dataset.artistJson, this);
+    });
+    container.appendChild(item);
+  }
+}
+
+async function toggleExcludedArtist(artistJson, btn) {
+  const artist = JSON.parse(artistJson);
+  const idx = excludedArtists.findIndex(a => a.id === artist.id);
+  if (idx >= 0) {
+    excludedArtists.splice(idx, 1);
+    btn.textContent = 'Sperren';
+  } else {
+    excludedArtists.push({ id: artist.id, name: artist.name, image_url: artist.image_url, genres: artist.genres });
+    btn.textContent = 'Entsperren';
+  }
+  await saveExcludedArtists();
+  renderExcludedArtists();
+}
+
+async function removeExcludedArtist(id) {
+  excludedArtists = excludedArtists.filter(a => a.id !== id);
+  await saveExcludedArtists();
+  renderExcludedArtists();
+  // Update search result buttons
+  document.querySelectorAll('#artist-search-results .show-item').forEach(item => {
+    const btn = item.querySelector('button');
+    const data = JSON.parse(item.dataset.artistJson || '{}');
+    if (data.id === id) btn.textContent = 'Sperren';
+  });
 }
 
 // ── Podcasts ─────────────────────────────────────────────────────────────────

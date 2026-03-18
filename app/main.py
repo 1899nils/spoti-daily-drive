@@ -158,6 +158,31 @@ async def set_selected_podcasts(body: dict[str, Any]):
     return {"ok": True, "podcasts": podcasts}
 
 
+# ── Excluded Artists ──────────────────────────────────────────────────────────
+
+@app.get("/api/artists/search")
+async def search_artists(q: str = Query(..., min_length=1)):
+    sp = get_spotify()
+    if sp is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    results = sp_api.search_artists(sp, q)
+    return {"artists": results}
+
+
+@app.get("/api/excluded-artists")
+async def get_excluded_artists():
+    return {"artists": load_config().get("excluded_artists", [])}
+
+
+@app.post("/api/excluded-artists")
+async def set_excluded_artists(body: dict[str, Any]):
+    artists = body.get("artists", [])
+    config = load_config()
+    config["excluded_artists"] = artists
+    save_config(config)
+    return {"ok": True, "artists": artists}
+
+
 # ── Build ─────────────────────────────────────────────────────────────────────
 
 @app.post("/api/build")
@@ -177,9 +202,13 @@ async def get_status():
     from .scheduler import scheduler
     config = load_config()
     next_run = None
-    job = scheduler.get_job("daily_build")
-    if job and job.next_run_time:
-        next_run = job.next_run_time.isoformat()
+    run_times = [
+        job.next_run_time
+        for job in scheduler.get_jobs()
+        if job.id.startswith("daily_build_") and job.next_run_time
+    ]
+    if run_times:
+        next_run = min(run_times).isoformat()
     playlist_url = None
     if config.get("playlist_id"):
         playlist_url = f"https://open.spotify.com/playlist/{config['playlist_id']}"

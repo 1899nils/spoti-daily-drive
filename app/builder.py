@@ -82,8 +82,8 @@ def build_playlist() -> dict:
                 seen.add(uri)
                 top_tracks.append(uri)
 
-    # Fill remaining slots with artist-based search (replaces removed /recommendations)
-    rec_tracks = sp_api.get_recommendations(sp, top_tracks, limit=rec_count)
+    # Fill remaining slots with tracks from similar (related) artists
+    rec_tracks = sp_api.get_similar_tracks(sp, top_tracks, limit=rec_count)
     # Deduplicate against top tracks
     rec_tracks = [u for u in rec_tracks if u not in seen]
 
@@ -92,14 +92,17 @@ def build_playlist() -> dict:
     random.shuffle(music_uris)
     music_uris = music_uris[:total_tracks]
 
-    # Fetch podcast episodes
+    # Remove tracks by excluded artists
+    excluded_ids: set[str] = {a["id"] for a in config.get("excluded_artists", [])}
+    if excluded_ids:
+        music_uris = sp_api.filter_excluded_artists(sp, music_uris, excluded_ids)
+
+    # Fetch today's podcast episode for each show (skip shows without a new episode today)
     episodes: list[str] = []
-    eps_per_show = max(1, podcast_count // len(selected_podcasts)) if selected_podcasts else 0
     for show in selected_podcasts:
-        eps = sp_api.get_latest_episodes(sp, show["id"], limit=eps_per_show)
-        episodes.extend(eps)
-        if len(episodes) >= podcast_count:
-            break
+        eps = sp_api.get_latest_episodes(sp, show["id"], limit=1, today_only=True)
+        if eps:
+            episodes.append(eps[0])
     episodes = episodes[:podcast_count]
 
     # Interleave: one podcast episode every ~7 music tracks
