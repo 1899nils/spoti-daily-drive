@@ -92,14 +92,12 @@ def build_playlist() -> dict:
     random.shuffle(music_uris)
     music_uris = music_uris[:total_tracks]
 
-    # Fetch podcast episodes
+    # Fetch today's podcast episode for each show (skip shows without a new episode today)
     episodes: list[str] = []
-    eps_per_show = max(1, podcast_count // len(selected_podcasts)) if selected_podcasts else 0
     for show in selected_podcasts:
-        eps = sp_api.get_latest_episodes(sp, show["id"], limit=eps_per_show)
-        episodes.extend(eps)
-        if len(episodes) >= podcast_count:
-            break
+        eps = sp_api.get_latest_episodes(sp, show["id"], limit=1, today_only=True)
+        if eps:
+            episodes.append(eps[0])
     episodes = episodes[:podcast_count]
 
     # Interleave: one podcast episode every ~7 music tracks

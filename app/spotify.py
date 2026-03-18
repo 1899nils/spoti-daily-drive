@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import random
+from datetime import date
 from typing import Any
 
 import spotipy
@@ -79,10 +80,23 @@ def search_shows(sp: spotipy.Spotify, query: str, limit: int = 10) -> list[dict[
     return shows
 
 
-def get_latest_episodes(sp: spotipy.Spotify, show_id: str, limit: int = 2) -> list[str]:
-    """Return episode URIs for the latest episodes of a show."""
+def get_latest_episodes(
+    sp: spotipy.Spotify, show_id: str, limit: int = 2, today_only: bool = False
+) -> list[str]:
+    """Return episode URIs for the latest episodes of a show.
+
+    If today_only is True, only episodes released today are returned.
+    """
     results = sp.show_episodes(show_id, limit=limit, market="from_token")
-    return [ep["uri"] for ep in results["items"] if ep and not ep.get("is_playable") is False]
+    today = date.today().isoformat()
+    uris = []
+    for ep in results["items"]:
+        if not ep or ep.get("is_playable") is False:
+            continue
+        if today_only and ep.get("release_date", "") != today:
+            continue
+        uris.append(ep["uri"])
+    return uris
 
 
 def get_current_user(sp: spotipy.Spotify) -> dict[str, Any]:

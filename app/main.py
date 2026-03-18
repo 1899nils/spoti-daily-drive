@@ -177,9 +177,13 @@ async def get_status():
     from .scheduler import scheduler
     config = load_config()
     next_run = None
-    job = scheduler.get_job("daily_build")
-    if job and job.next_run_time:
-        next_run = job.next_run_time.isoformat()
+    run_times = [
+        job.next_run_time
+        for job in scheduler.get_jobs()
+        if job.id.startswith("daily_build_") and job.next_run_time
+    ]
+    if run_times:
+        next_run = min(run_times).isoformat()
     playlist_url = None
     if config.get("playlist_id"):
         playlist_url = f"https://open.spotify.com/playlist/{config['playlist_id']}"
