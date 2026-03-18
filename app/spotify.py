@@ -14,13 +14,54 @@ def get_top_tracks(sp: spotipy.Spotify, time_range: str, limit: int) -> list[str
 
 
 def get_recommendations(sp: spotipy.Spotify, seed_uris: list[str], limit: int) -> list[str]:
-    """Return recommended track URIs based on seed tracks."""
-    if not seed_uris:
+    """Return recommended track URIs.
+
+    The /recommendations endpoint was deprecated for new apps in November 2024.
+    Workaround: fetch top artists, then search for tracks by those artists.
+    """
+    if not seed_uris or limit <= 0:
         return []
-    seeds = random.sample(seed_uris, min(5, len(seed_uris)))
-    seed_ids = [uri.split(":")[-1] for uri in seeds]
-    results = sp.recommendations(seed_tracks=seed_ids, limit=limit)
-    return [track["uri"] for track in results["tracks"]]
+
+    # Get top artists for better seed diversity
+    try:
+        top_artists_result = sp.current_user_top_artists(limit=5, time_range="medium_term")
+        artist_names = [a["name"] for a in top_artists_result["items"]]
+        genres = list({g for a in top_artists_result["items"] for g in a.get("genres", [])})[:3]
+    except Exception:
+        artist_names = []
+        genres = []
+
+    collected: list[str] = []
+    seen_ids = {uri.split(":")[-1] for uri in seed_uris}
+
+    # Search by top artists
+    for artist in artist_names[:3]:
+        if len(collected) >= limit:
+            break
+        try:
+            results = sp.search(q=f'artist:"{artist}"', type="track", limit=10, market="from_token")
+            for track in results["tracks"]["items"]:
+                if track["id"] not in seen_ids and len(collected) < limit:
+                    seen_ids.add(track["id"])
+                    collected.append(track["uri"])
+        except Exception:
+            continue
+
+    # Fill remaining via genre search
+    for genre in genres:
+        if len(collected) >= limit:
+            break
+        try:
+            results = sp.search(q=f"genre:{genre}", type="track", limit=10, market="from_token")
+            for track in results["tracks"]["items"]:
+                if track["id"] not in seen_ids and len(collected) < limit:
+                    seen_ids.add(track["id"])
+                    collected.append(track["uri"])
+        except Exception:
+            continue
+
+    random.shuffle(collected)
+    return collected[:limit]
 
 
 def search_shows(sp: spotipy.Spotify, query: str, limit: int = 10) -> list[dict[str, str]]:
@@ -68,8 +109,8 @@ def get_or_create_playlist(sp: spotipy.Spotify, user_id: str, name: str, existin
             break
         offset += 50
 
-    # Create new playlist
-    pl = sp.user_playlist_create(user_id, name, public=False, description="Your personalized Daily Drive — auto-generated.")
+    # Create new playlist via /me/playlists (user-specific endpoint removed Feb 2026)
+    pl = sp.user_playlist_create(sp.me()["id"], name, public=False, description="Deine personalisierte Daily Drive Playlist — automatisch aktualisiert.")
     return pl["id"]
 
 

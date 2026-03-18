@@ -32,6 +32,7 @@ def schedule_daily(time_str: str) -> None:
         CronTrigger(hour=hour, minute=minute),
         id="daily_build",
         replace_existing=True,
+        misfire_grace_time=3600,  # Job noch ausführen wenn Container bis zu 1h zu spät startet
     )
     logger.info("Scheduler: daily build set for %02d:%02d", hour, minute)
 
