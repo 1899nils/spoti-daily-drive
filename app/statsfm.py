@@ -9,7 +9,40 @@ import httpx
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.stats.fm/api/v1"
+_SEARCH_URL = "https://api.stats.fm/api/search"
 _TIMEOUT = 10.0
+
+
+def resolve_username(username: str) -> Optional[dict]:
+    """Resolve a stats.fm profile name to a customId.
+
+    Tries direct lookup first, then falls back to the search API.
+    Returns {"customId": "...", "displayName": "..."} or None.
+    """
+    try:
+        with httpx.Client(timeout=_TIMEOUT) as client:
+            # Step 1: direct lookup (works when username IS the customId)
+            r = client.get(f"{BASE_URL}/users/{username}")
+            if r.status_code == 200:
+                data = r.json().get("item", r.json())
+                custom_id = data.get("customId") or username
+                display_name = data.get("displayName") or username
+                return {"customId": custom_id, "displayName": display_name}
+
+            # Step 2: search API fallback
+            r = client.get(_SEARCH_URL, params={"query": username, "type": "user"})
+            if r.status_code == 200:
+                users = r.json().get("items", {}).get("users", [])
+                if users:
+                    u = users[0]
+                    return {
+                        "customId": u.get("customId") or u.get("id") or username,
+                        "displayName": u.get("displayName") or username,
+                    }
+        return None
+    except Exception as exc:
+        logger.warning("stats.fm resolve_username error: %s", exc)
+        return None
 
 
 def validate_user_id(user_id: str) -> Optional[dict]:
