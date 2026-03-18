@@ -18,6 +18,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "last_build": None,
     "statsfm_user_id": None,
     "statsfm_display_name": None,
+    "excluded_artists": [],
 }
 
 

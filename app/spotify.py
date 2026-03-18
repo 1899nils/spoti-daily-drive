@@ -14,49 +14,56 @@ def get_top_tracks(sp: spotipy.Spotify, time_range: str, limit: int) -> list[str
     return [item["uri"] for item in results["items"] if item]
 
 
-def get_recommendations(sp: spotipy.Spotify, seed_uris: list[str], limit: int) -> list[str]:
-    """Return recommended track URIs.
+def get_similar_tracks(sp: spotipy.Spotify, seed_uris: list[str], limit: int) -> list[str]:
+    """Return track URIs from artists similar to the user's top artists.
 
-    The /recommendations endpoint was deprecated for new apps in November 2024.
-    Workaround: fetch top artists, then search for tracks by those artists.
+    Uses Spotify's related-artists endpoint to find genuinely similar music
+    rather than just more tracks from the same artists.
     """
-    if not seed_uris or limit <= 0:
+    if limit <= 0:
         return []
 
-    # Get top artists for better seed diversity
+    # Get the user's top artists (IDs + names)
     try:
-        top_artists_result = sp.current_user_top_artists(limit=5, time_range="medium_term")
-        artist_names = [a["name"] for a in top_artists_result["items"]]
-        genres = list({g for a in top_artists_result["items"] for g in a.get("genres", [])})[:3]
+        top_result = sp.current_user_top_artists(limit=5, time_range="medium_term")
+        top_artists = top_result["items"]
     except Exception:
-        artist_names = []
-        genres = []
+        top_artists = []
 
-    collected: list[str] = []
-    seen_ids = {uri.split(":")[-1] for uri in seed_uris}
+    if not top_artists:
+        return []
 
-    # Search by top artists
-    for artist in artist_names[:3]:
-        if len(collected) >= limit:
-            break
+    top_artist_ids = {a["id"] for a in top_artists}
+    seen_artist_ids = set(top_artist_ids)
+
+    # For each top artist, fetch related artists
+    related_artists: list[dict] = []
+    for artist in top_artists[:4]:
         try:
-            results = sp.search(q=f'artist:"{artist}"', type="track", limit=10, market="from_token")
-            for track in results["tracks"]["items"]:
-                if track["id"] not in seen_ids and len(collected) < limit:
-                    seen_ids.add(track["id"])
-                    collected.append(track["uri"])
+            rel = sp.artist_related_artists(artist["id"])["artists"]
+            for ra in rel[:4]:
+                if ra["id"] not in seen_artist_ids:
+                    seen_artist_ids.add(ra["id"])
+                    related_artists.append(ra)
         except Exception:
             continue
 
-    # Fill remaining via genre search
-    for genre in genres:
+    random.shuffle(related_artists)
+
+    # Collect tracks from related artists via search
+    collected: list[str] = []
+    seen_track_ids = {uri.split(":")[-1] for uri in seed_uris}
+
+    for artist in related_artists:
         if len(collected) >= limit:
             break
         try:
-            results = sp.search(q=f"genre:{genre}", type="track", limit=10, market="from_token")
+            results = sp.search(
+                q=f'artist:"{artist["name"]}"', type="track", limit=8, market="from_token"
+            )
             for track in results["tracks"]["items"]:
-                if track["id"] not in seen_ids and len(collected) < limit:
-                    seen_ids.add(track["id"])
+                if track["id"] not in seen_track_ids and len(collected) < limit:
+                    seen_track_ids.add(track["id"])
                     collected.append(track["uri"])
         except Exception:
             continue
@@ -135,3 +142,40 @@ def replace_playlist_tracks(sp: spotipy.Spotify, playlist_id: str, uris: list[st
     # Add remaining in chunks
     for i in range(100, len(uris), 100):
         sp.playlist_add_items(playlist_id, uris[i:i + 100])
+
+
+def search_artists(sp: spotipy.Spotify, query: str, limit: int = 10) -> list[dict[str, str]]:
+    """Search for artists and return [{id, name, image_url, genres}]."""
+    results = sp.search(q=query, type="artist", limit=limit, market="from_token")
+    artists = []
+    for item in results["artists"]["items"]:
+        image_url = item["images"][0]["url"] if item.get("images") else ""
+        artists.append({
+            "id": item["id"],
+            "name": item["name"],
+            "image_url": image_url,
+            "genres": ", ".join(item.get("genres", [])[:3]),
+        })
+    return artists
+
+
+def filter_excluded_artists(
+    sp: spotipy.Spotify, track_uris: list[str], excluded_ids: set[str]
+) -> list[str]:
+    """Remove tracks by excluded artists. Fetches track details in batches of 50."""
+    if not excluded_ids or not track_uris:
+        return track_uris
+
+    filtered: list[str] = []
+    for i in range(0, len(track_uris), 50):
+        batch_uris = track_uris[i : i + 50]
+        batch_ids = [u.split(":")[-1] for u in batch_uris]
+        try:
+            tracks = sp.tracks(batch_ids)["tracks"]
+        except Exception:
+            filtered.extend(batch_uris)
+            continue
+        for uri, track in zip(batch_uris, tracks):
+            if track and not any(a["id"] in excluded_ids for a in track.get("artists", [])):
+                filtered.append(uri)
+    return filtered

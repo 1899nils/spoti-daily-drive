@@ -158,6 +158,31 @@ async def set_selected_podcasts(body: dict[str, Any]):
     return {"ok": True, "podcasts": podcasts}
 
 
+# ── Excluded Artists ──────────────────────────────────────────────────────────
+
+@app.get("/api/artists/search")
+async def search_artists(q: str = Query(..., min_length=1)):
+    sp = get_spotify()
+    if sp is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    results = sp_api.search_artists(sp, q)
+    return {"artists": results}
+
+
+@app.get("/api/excluded-artists")
+async def get_excluded_artists():
+    return {"artists": load_config().get("excluded_artists", [])}
+
+
+@app.post("/api/excluded-artists")
+async def set_excluded_artists(body: dict[str, Any]):
+    artists = body.get("artists", [])
+    config = load_config()
+    config["excluded_artists"] = artists
+    save_config(config)
+    return {"ok": True, "artists": artists}
+
+
 # ── Build ─────────────────────────────────────────────────────────────────────
 
 @app.post("/api/build")
