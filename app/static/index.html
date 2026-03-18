@@ -215,11 +215,12 @@
       </p>
       <p style="margin-bottom:.75rem">
         <strong>2.</strong> Nach dem Login leitet Spotify auf eine Seite weiter, die nicht lädt –
-        das ist normal. Kopiere die vollständige URL aus der Adresszeile.
+        das ist normal (kein SSL-Zertifikat für lokale IPs). Kopiere die vollständige URL
+        aus der Adresszeile (beginnt mit <code>https://…?code=</code>).
       </p>
       <p style="margin-bottom:.5rem"><strong>3.</strong> Füge die URL hier ein:</p>
       <input id="callback-url-input" type="text"
-             placeholder="http://localhost:787/auth/callback?code=..."
+             placeholder="https://192.168.x.x:8080/auth/callback?code=..."
              style="width:100%;box-sizing:border-box;padding:.6rem .75rem;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:.85rem;margin-bottom:.75rem">
       <button class="btn" onclick="submitCallbackUrl()">Anmelden</button>
       <p id="login-error" style="color:#e05;margin-top:.5rem;display:none"></p>
@@ -318,13 +319,13 @@
     <p class="statsfm-hint">
       Verbinde deinen <a href="https://stats.fm" target="_blank">stats.fm</a>-Account, um die Playlist auf Basis
       deiner echten Hörstatistiken (Play-Counts, Hörzeit) zu erstellen — präziser als Spotifys eigenes Ranking.<br>
-      Token findest du unter: <strong>stats.fm → Profil → Einstellungen → Zugangstoken</strong>
+      Deine User-ID findest du in der URL: <strong>stats.fm/<em>DEINE_ID</em></strong>
     </p>
 
     <div class="setting-row" style="margin-top:.9rem">
-      <label>Access Token</label>
+      <label>User-ID</label>
       <div style="display:flex;gap:.5rem">
-        <input type="password" id="sfm-token" placeholder="Hier einfügen…" autocomplete="off" style="flex:1" />
+        <input type="text" id="sfm-user-id" placeholder="z.B. 1d0oe6e1gtdfgtntg2jn6g5kt" autocomplete="off" style="flex:1" />
         <button class="btn btn-outline" onclick="connectStatsfm()">Verbinden</button>
       </div>
     </div>
@@ -456,8 +457,8 @@ async function loadSettings() {
   document.getElementById('podcast-eps').value = settings.podcast_episodes ?? 4;
   document.getElementById('lbl-eps').textContent = settings.podcast_episodes ?? 4;
   document.getElementById('schedule-time').value = settings.schedule_time || '06:00';
-  if (settings.statsfm_token) {
-    document.getElementById('sfm-token').placeholder = '••••••••••••••••';
+  if (settings.statsfm_user_id) {
+    document.getElementById('sfm-user-id').value = settings.statsfm_user_id;
   }
 }
 
@@ -623,10 +624,9 @@ async function loadStatsfmStatus() {
 }
 
 async function connectStatsfm() {
-  const token = document.getElementById('sfm-token').value.trim();
-  if (!token) return;
+  const userId = document.getElementById('sfm-user-id').value.trim();
+  if (!userId) return;
 
-  // Resolve user ID by validating token first (API will tell us the user)
   const statusEl = document.getElementById('sfm-status');
   const dot = document.getElementById('sfm-dot');
   const text = document.getElementById('sfm-status-text');
@@ -634,29 +634,21 @@ async function connectStatsfm() {
   dot.className = 'dot dot-grey';
   text.innerHTML = '<span class="spinner"></span>Verbinde…';
 
-  // Save token (user_id will be resolved server-side via /me)
+  // Save user ID
   await fetch('/api/settings', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ statsfm_token: token }),
+    body: JSON.stringify({ statsfm_user_id: userId }),
   });
 
-  // Fetch status to verify + get user name
+  // Verify via status endpoint
   const data = await fetch('/api/statsfm/status').then(r => r.json()).catch(() => null);
-  if (data && data.connected && data.user) {
+  if (data && data.connected) {
     dot.className = 'dot dot-green';
-    text.textContent = 'Verbunden als ' + (data.user.name || data.user.id);
-    // Persist user ID so builder can use it
-    await fetch('/api/settings', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ statsfm_user_id: data.user.id }),
-    });
-    document.getElementById('sfm-token').value = '';
-    document.getElementById('sfm-token').placeholder = '••••••••••••••••';
+    text.textContent = 'Verbunden als ' + userId;
   } else {
     dot.className = 'dot dot-grey';
-    text.textContent = 'Verbindung fehlgeschlagen — Token prüfen';
+    text.textContent = 'Verbindung fehlgeschlagen — User-ID prüfen';
   }
 }
 

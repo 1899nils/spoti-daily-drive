@@ -1,4 +1,4 @@
-"""stats.fm API client for enriched listening history data."""
+"""stats.fm API client – public endpoints, no token required."""
 from __future__ import annotations
 
 import logging
@@ -12,26 +12,23 @@ BASE_URL = "https://api.stats.fm/api/v1"
 _TIMEOUT = 10.0
 
 
-def _headers(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
-
-
-def validate_token(token: str) -> Optional[dict]:
-    """Return the stats.fm user object or None if the token is invalid."""
+def validate_user_id(user_id: str) -> Optional[dict]:
+    """Return a minimal user dict if the user_id is valid, else None."""
     try:
         with httpx.Client(timeout=_TIMEOUT) as client:
-            r = client.get(f"{BASE_URL}/me", headers=_headers(token))
+            r = client.get(
+                f"{BASE_URL}/users/{user_id}/top/tracks",
+                params={"range": "weeks", "limit": 1},
+            )
         if r.status_code == 200:
-            data = r.json()
-            return data.get("item") or data
+            return {"id": user_id}
         return None
     except Exception as exc:
-        logger.warning("stats.fm validate_token error: %s", exc)
+        logger.warning("stats.fm validate_user_id error: %s", exc)
         return None
 
 
 def get_top_tracks(
-    token: str,
     user_id: str,
     range: str = "months",
     limit: int = 50,
@@ -45,7 +42,6 @@ def get_top_tracks(
             r = client.get(
                 f"{BASE_URL}/users/{user_id}/top/tracks",
                 params={"range": range, "limit": limit},
-                headers=_headers(token),
             )
         if r.status_code != 200:
             logger.warning("stats.fm top/tracks returned %s", r.status_code)
@@ -58,7 +54,6 @@ def get_top_tracks(
             spotify_ids = ext.get("spotify", [])
             if spotify_ids:
                 sid = spotify_ids[0]
-                # Normalise to URI form
                 if not sid.startswith("spotify:track:"):
                     sid = f"spotify:track:{sid}"
                 uris.append(sid)
