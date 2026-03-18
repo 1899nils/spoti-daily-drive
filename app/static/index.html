@@ -303,9 +303,12 @@
              oninput="document.getElementById('lbl-eps').textContent=this.value" />
     </div>
 
-    <div class="setting-row">
-      <label>Tägliche Aktualisierungszeit</label>
-      <input type="time" id="schedule-time" value="06:00" />
+    <div class="setting-row" style="align-items:flex-start">
+      <label style="padding-top:.4rem">Aktualisierungszeiten</label>
+      <div style="display:flex;flex-direction:column;gap:.4rem;flex:1">
+        <div id="schedule-times-list"></div>
+        <button class="btn btn-outline" style="align-self:flex-start;font-size:.8rem;padding:.3rem .8rem" onclick="addScheduleTime()">+ Zeit hinzufügen</button>
+      </div>
     </div>
 
     <div class="save-row">
@@ -428,7 +431,7 @@ async function init() {
   await loadSettings();
   await loadStatus();
   await loadSelectedPodcasts();
-  await loadStatsfmStatus();
+  loadStatsfmStatus();
 }
 
 async function loadStatus() {
@@ -456,7 +459,7 @@ async function loadSettings() {
   updateRatioBars();
   document.getElementById('podcast-eps').value = settings.podcast_episodes ?? 4;
   document.getElementById('lbl-eps').textContent = settings.podcast_episodes ?? 4;
-  document.getElementById('schedule-time').value = settings.schedule_time || '06:00';
+  renderScheduleTimes(settings.schedule_times || ['06:00']);
   if (settings.statsfm_user_id) {
     document.getElementById('sfm-user-id').value = settings.statsfm_user_id;
   }
@@ -468,7 +471,7 @@ async function saveSettings() {
     top_tracks_ratio: parseInt(document.getElementById('top-ratio').value) / 100,
     recommendations_ratio: parseInt(document.getElementById('rec-ratio').value) / 100,
     podcast_episodes: parseInt(document.getElementById('podcast-eps').value),
-    schedule_time: document.getElementById('schedule-time').value,
+    schedule_times: Array.from(document.querySelectorAll('.schedule-time-input')).map(i => i.value).filter(v => v),
   };
   await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
   showBuildStatus('Einstellungen gespeichert', 'success');
@@ -530,15 +533,17 @@ async function searchPodcasts() {
     const alreadySelected = selectedPodcasts.some(s => s.id === show.id);
     const item = document.createElement('div');
     item.className = 'show-item';
+    item.dataset.showJson = JSON.stringify(show);
     item.innerHTML = `
-      <img src="${show.image_url || ''}" alt="" onerror="this.style.display='none'" />
+      <img src="${esc(show.image_url || '')}" alt="" onerror="this.style.display='none'" />
       <div class="show-info">
         <div class="show-name">${esc(show.name)}</div>
         <div class="show-pub">${esc(show.publisher)}</div>
       </div>
-      <button class="btn btn-outline" onclick="togglePodcast(${JSON.stringify(JSON.stringify(show))}, this)">
-        ${alreadySelected ? 'Entfernen' : 'Hinzufügen'}
-      </button>`;
+      <button class="btn btn-outline">${alreadySelected ? 'Entfernen' : 'Hinzufügen'}</button>`;
+    item.querySelector('button').addEventListener('click', function() {
+      togglePodcast(item.dataset.showJson, this);
+    });
     container.appendChild(item);
   }
 }
@@ -607,19 +612,37 @@ function renderSelected() {
 
 // ── stats.fm ──────────────────────────────────────────────────────────────────
 
-async function loadStatsfmStatus() {
-  const data = await fetch('/api/statsfm/status').then(r => r.json()).catch(() => null);
-  if (!data) return;
+// ── Schedule Times ────────────────────────────────────────────────────────────
+
+function renderScheduleTimes(times) {
+  const list = document.getElementById('schedule-times-list');
+  list.innerHTML = '';
+  times.forEach(t => addScheduleTimeRow(t));
+}
+
+function addScheduleTimeRow(value = '06:00') {
+  const list = document.getElementById('schedule-times-list');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:.4rem;align-items:center';
+  row.innerHTML = `
+    <input type="time" class="schedule-time-input" value="${value}" style="flex:1;max-width:10rem" />
+    <button class="btn btn-outline" style="font-size:.8rem;padding:.3rem .6rem;color:var(--text-muted)" onclick="this.parentElement.remove()">×</button>`;
+  list.appendChild(row);
+}
+
+function addScheduleTime() {
+  addScheduleTimeRow('08:00');
+}
+
+function loadStatsfmStatus() {
+  // Use locally loaded settings instead of a separate API call to avoid flicker
   const statusEl = document.getElementById('sfm-status');
   const dot = document.getElementById('sfm-dot');
   const text = document.getElementById('sfm-status-text');
-  statusEl.style.display = 'flex';
-  if (data.connected && data.user) {
+  if (settings.statsfm_user_id) {
+    statusEl.style.display = 'flex';
     dot.className = 'dot dot-green';
-    text.textContent = 'Verbunden als ' + (data.user.name || data.user.id);
-  } else {
-    dot.className = 'dot dot-grey';
-    text.textContent = 'Nicht verbunden';
+    text.textContent = 'Verbunden als ' + (settings.statsfm_display_name || settings.statsfm_user_id);
   }
 }
 
@@ -644,11 +667,11 @@ async function connectStatsfm() {
     return;
   }
 
-  // Save resolved customId
+  // Save resolved customId + display name
   await fetch('/api/settings', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ statsfm_user_id: resolve.customId }),
+    body: JSON.stringify({ statsfm_user_id: resolve.customId, statsfm_display_name: resolve.displayName }),
   });
 
   dot.className = 'dot dot-green';

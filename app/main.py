@@ -17,7 +17,7 @@ load_dotenv()  # picks up .env in cwd when running locally
 from .auth import exchange_code, get_auth_url, get_spotify, is_authenticated
 from .builder import build_playlist
 from .config import load_config, save_config
-from .scheduler import schedule_daily, start_scheduler
+from .scheduler import schedule_all, start_scheduler
 from . import spotify as sp_api
 from . import statsfm as sfm_api
 
@@ -92,15 +92,15 @@ async def get_settings():
 async def update_settings(body: dict[str, Any]):
     config = load_config()
     allowed = {"total_tracks", "top_tracks_ratio", "recommendations_ratio",
-               "podcast_episodes", "schedule_time", "playlist_name",
-               "statsfm_user_id"}
+               "podcast_episodes", "schedule_times", "playlist_name",
+               "statsfm_user_id", "statsfm_display_name"}
     for key in allowed:
         if key in body:
             config[key] = body[key]
     save_config(config)
-    # Reschedule if time changed
-    if "schedule_time" in body:
-        schedule_daily(config["schedule_time"])
+    # Reschedule if times changed
+    if "schedule_times" in body:
+        schedule_all(config["schedule_times"])
     return {"ok": True, "config": config}
 
 
