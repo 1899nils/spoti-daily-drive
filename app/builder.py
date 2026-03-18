@@ -48,16 +48,15 @@ def build_playlist() -> dict:
     top_count = max(1, int(total_tracks * top_ratio))
     rec_count = max(1, int(total_tracks * rec_ratio))
 
-    sfm_token: str | None = config.get("statsfm_token")
     sfm_user_id: str | None = config.get("statsfm_user_id")
 
     seen: set[str] = set()
     top_tracks: list[str] = []
 
-    if sfm_token and sfm_user_id:
+    if sfm_user_id:
         # Primary source: stats.fm — sorted by actual stream count
-        recent = sfm_api.get_top_tracks(sfm_token, sfm_user_id, range="months", limit=50)
-        alltime = sfm_api.get_top_tracks(sfm_token, sfm_user_id, range="lifetime", limit=50)
+        recent = sfm_api.get_top_tracks(sfm_user_id, range="months", limit=50)
+        alltime = sfm_api.get_top_tracks(sfm_user_id, range="lifetime", limit=50)
 
         # Interleave recent + all-time for variety, dedup, cap at top_count
         for a, b in zip(recent, alltime):

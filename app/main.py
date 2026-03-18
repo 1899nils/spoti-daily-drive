@@ -93,7 +93,7 @@ async def update_settings(body: dict[str, Any]):
     config = load_config()
     allowed = {"total_tracks", "top_tracks_ratio", "recommendations_ratio",
                "podcast_episodes", "schedule_time", "playlist_name",
-               "statsfm_token", "statsfm_user_id"}
+               "statsfm_user_id"}
     for key in allowed:
         if key in body:
             config[key] = body[key]
@@ -109,18 +109,18 @@ async def update_settings(body: dict[str, Any]):
 @app.get("/api/statsfm/status")
 async def statsfm_status():
     config = load_config()
-    token = config.get("statsfm_token")
-    if not token:
+    user_id = config.get("statsfm_user_id")
+    if not user_id:
         return {"connected": False, "user": None}
-    user = await asyncio.to_thread(sfm_api.validate_token, token)
+    user = await asyncio.to_thread(sfm_api.validate_user_id, user_id)
     if user is None:
         return {"connected": False, "user": None}
     return {
         "connected": True,
         "user": {
-            "id": user.get("id") or user.get("customId"),
-            "name": user.get("displayName") or user.get("id"),
-            "image": user.get("image"),
+            "id": user_id,
+            "name": user_id,
+            "image": None,
         },
     }
 
