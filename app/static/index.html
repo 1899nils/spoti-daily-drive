@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Daily Drive 🎵</title>
+<style>
+  :root {
+    --bg: #121212;
+    --surface: #1e1e1e;
+    --surface2: #2a2a2a;
+    --border: #333;
+    --green: #1db954;
+    --green-dark: #17a349;
+    --text: #e0e0e0;
+    --text-muted: #888;
+    --red: #e05555;
+    --radius: 10px;
+    --font: 'Segoe UI', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .logo { display: flex; align-items: center; gap: .6rem; font-size: 1.3rem; font-weight: 700; }
+  .logo svg { color: var(--green); }
+  .user-info { display: flex; align-items: center; gap: .7rem; font-size: .9rem; }
+  .user-info img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
+  .btn {
+    background: var(--green);
+    color: #000;
+    border: none;
+    border-radius: 30px;
+    padding: .5rem 1.2rem;
+    font-size: .9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .btn:hover { background: var(--green-dark); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-outline {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-outline:hover { background: var(--surface2); }
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-danger:hover { background: #c94444; }
+
+  main { max-width: 800px; margin: 0 auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1.2rem; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.2rem 1.4rem;
+  }
+  .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; color: var(--green); }
+
+  /* Status card */
+  .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+  .status-item { background: var(--surface2); border-radius: 8px; padding: .8rem 1rem; }
+  .status-item .label { font-size: .75rem; color: var(--text-muted); margin-bottom: .3rem; }
+  .status-item .value { font-size: .95rem; font-weight: 500; }
+  .playlist-link { color: var(--green); text-decoration: none; }
+  .playlist-link:hover { text-decoration: underline; }
+
+  /* Build button */
+  .build-row { display: flex; align-items: center; gap: 1rem; margin-top: 1rem; }
+  .build-status { font-size: .85rem; color: var(--text-muted); }
+  .build-status.success { color: var(--green); }
+  .build-status.error { color: var(--red); }
+
+  /* Settings */
+  .setting-row { display: flex; flex-direction: column; gap: .4rem; margin-bottom: 1rem; }
+  .setting-row:last-child { margin-bottom: 0; }
+  label { font-size: .85rem; color: var(--text-muted); display: flex; justify-content: space-between; }
+  label span { color: var(--text); font-weight: 600; }
+  input[type="range"] { width: 100%; accent-color: var(--green); cursor: pointer; }
+  input[type="time"], input[type="text"], input[type="number"] {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: .45rem .7rem;
+    font-size: .9rem;
+    width: 100%;
+  }
+  input[type="time"]:focus, input[type="text"]:focus, input[type="number"]:focus {
+    outline: none;
+    border-color: var(--green);
+  }
+
+  /* Ratio bars */
+  .ratio-visual {
+    height: 8px;
+    border-radius: 4px;
+    background: var(--surface2);
+    overflow: hidden;
+    display: flex;
+    margin-top: .3rem;
+  }
+  .ratio-bar-top { background: var(--green); transition: width .2s; }
+  .ratio-bar-rec { background: #1aa3ff; transition: width .2s; }
+  .ratio-bar-rest { background: var(--border); flex: 1; }
+  .ratio-legend { display: flex; gap: 1rem; font-size: .75rem; color: var(--text-muted); margin-top: .4rem; }
+  .ratio-legend span::before { content: '■ '; }
+  .ratio-legend .top-color::before { color: var(--green); }
+  .ratio-legend .rec-color::before { color: #1aa3ff; }
+
+  /* Podcast section */
+  .search-row { display: flex; gap: .5rem; }
+  .search-row input { flex: 1; }
+  .show-list { margin-top: .8rem; display: flex; flex-direction: column; gap: .5rem; }
+  .show-item {
+    display: flex;
+    align-items: center;
+    gap: .8rem;
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: .6rem .8rem;
+  }
+  .show-item img { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
+  .show-item .show-info { flex: 1; min-width: 0; }
+  .show-item .show-name { font-size: .9rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .show-item .show-pub { font-size: .75rem; color: var(--text-muted); }
+  .no-results { font-size: .85rem; color: var(--text-muted); margin-top: .6rem; }
+  .section-divider { height: 1px; background: var(--border); margin: .8rem 0; }
+
+  /* Spinner */
+  .spinner {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+    vertical-align: middle;
+    margin-right: .4rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Login overlay */
+  #login-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.85);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100;
+  }
+  .login-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 2.5rem;
+    text-align: center;
+    max-width: 360px;
+    width: 90%;
+  }
+  .login-box h1 { font-size: 1.6rem; margin-bottom: .5rem; }
+  .login-box p { color: var(--text-muted); font-size: .9rem; margin-bottom: 1.5rem; }
+
+  .save-row { display: flex; justify-content: flex-end; margin-top: .5rem; }
+  .tag { display: inline-block; background: var(--surface2); border-radius: 4px; padding: .15rem .5rem; font-size: .75rem; color: var(--text-muted); margin-left: .3rem; }
+</style>
+</head>
+<body>
+
+<div id="login-overlay" style="display:none">
+  <div class="login-box">
+    <div style="font-size:3rem;margin-bottom:.5rem">🎵</div>
+    <h1>Daily Drive</h1>
+    <p>Verbinde dich mit Spotify, um deine personalisierte Daily Drive Playlist zu erstellen.</p>
+    <a href="/auth/login" class="btn" style="display:inline-block;text-decoration:none">Mit Spotify anmelden</a>
+  </div>
+</div>
+
+<header>
+  <div class="logo">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424a.622.622 0 01-.857.207c-2.348-1.435-5.304-1.76-8.785-.964a.622.622 0 01-.277-1.215c3.809-.87 7.076-.496 9.713 1.115a.622.622 0 01.206.857zm1.223-2.722a.779.779 0 01-1.072.257c-2.687-1.652-6.785-2.131-9.965-1.166a.779.779 0 01-.457-1.489c3.633-1.118 8.147-.576 11.238 1.326a.779.779 0 01.256 1.072zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71a.935.935 0 11-.543-1.79c3.532-1.072 9.404-.865 13.115 1.338a.935.935 0 01-.955 1.609z"/>
+    </svg>
+    Daily Drive
+  </div>
+  <div id="header-user" class="user-info" style="display:none">
+    <img id="user-img" src="" alt="" />
+    <span id="user-name"></span>
+  </div>
+</header>
+
+<main>
+  <!-- Status -->
+  <div class="card">
+    <h2>Status</h2>
+    <div class="status-grid">
+      <div class="status-item">
+        <div class="label">Letztes Update</div>
+        <div class="value" id="last-build">—</div>
+      </div>
+      <div class="status-item">
+        <div class="label">Nächstes Update</div>
+        <div class="value" id="next-run">—</div>
+      </div>
+      <div class="status-item" style="grid-column:1/-1">
+        <div class="label">Playlist</div>
+        <div class="value" id="playlist-link">—</div>
+      </div>
+    </div>
+    <div class="build-row">
+      <button class="btn" id="build-btn" onclick="triggerBuild()">Jetzt aktualisieren</button>
+      <span class="build-status" id="build-status"></span>
+    </div>
+  </div>
+
+  <!-- Playlist-Mix Settings -->
+  <div class="card">
+    <h2>Playlist-Einstellungen</h2>
+
+    <div class="setting-row">
+      <label>Gesamtanzahl Songs <span id="lbl-total">30</span></label>
+      <input type="range" id="total-tracks" min="10" max="80" step="5" value="30"
+             oninput="document.getElementById('lbl-total').textContent=this.value; updateRatioBars()" />
+    </div>
+
+    <div class="setting-row">
+      <label>Top Tracks (eigene Lieblinge) <span id="lbl-top">40%</span></label>
+      <input type="range" id="top-ratio" min="10" max="80" step="5" value="40"
+             oninput="onRatioChange('top')" />
+    </div>
+
+    <div class="setting-row">
+      <label>Empfehlungen (neue Entdeckungen) <span id="lbl-rec">40%</span></label>
+      <input type="range" id="rec-ratio" min="10" max="80" step="5" value="40"
+             oninput="onRatioChange('rec')" />
+    </div>
+
+    <div class="ratio-visual">
+      <div class="ratio-bar-top" id="bar-top" style="width:40%"></div>
+      <div class="ratio-bar-rec" id="bar-rec" style="width:40%"></div>
+      <div class="ratio-bar-rest" id="bar-rest"></div>
+    </div>
+    <div class="ratio-legend">
+      <span class="top-color">Top Tracks</span>
+      <span class="rec-color">Empfehlungen</span>
+    </div>
+
+    <div class="setting-row" style="margin-top:1rem">
+      <label>Podcast-Episoden in der Playlist <span id="lbl-eps">4</span></label>
+      <input type="range" id="podcast-eps" min="0" max="10" step="1" value="4"
+             oninput="document.getElementById('lbl-eps').textContent=this.value" />
+    </div>
+
+    <div class="setting-row">
+      <label>Tägliche Aktualisierungszeit</label>
+      <input type="time" id="schedule-time" value="06:00" />
+    </div>
+
+    <div class="save-row">
+      <button class="btn" onclick="saveSettings()">Speichern</button>
+    </div>
+  </div>
+
+  <!-- Podcast Selection -->
+  <div class="card">
+    <h2>Podcasts auswählen</h2>
+    <div class="search-row">
+      <input type="text" id="podcast-query" placeholder="Podcast suchen…" onkeydown="if(event.key==='Enter')searchPodcasts()" />
+      <button class="btn" onclick="searchPodcasts()">Suchen</button>
+    </div>
+    <div id="search-results" class="show-list"></div>
+
+    <div class="section-divider" id="selected-divider" style="display:none"></div>
+    <div id="selected-podcasts-label" style="display:none;font-size:.8rem;color:var(--text-muted);margin-bottom:.5rem">Ausgewählt</div>
+    <div id="selected-list" class="show-list"></div>
+  </div>
+</main>
+
+<script>
+let selectedPodcasts = [];
+let settings = {};
+
+// ── Ratios ──────────────────────────────────────────────────────────────────
+
+function onRatioChange(changed) {
+  let top = parseInt(document.getElementById('top-ratio').value);
+  let rec = parseInt(document.getElementById('rec-ratio').value);
+  if (top + rec > 100) {
+    if (changed === 'top') rec = 100 - top;
+    else top = 100 - rec;
+    document.getElementById('top-ratio').value = top;
+    document.getElementById('rec-ratio').value = rec;
+  }
+  document.getElementById('lbl-top').textContent = top + '%';
+  document.getElementById('lbl-rec').textContent = rec + '%';
+  updateRatioBars();
+}
+
+function updateRatioBars() {
+  const top = parseInt(document.getElementById('top-ratio').value);
+  const rec = parseInt(document.getElementById('rec-ratio').value);
+  document.getElementById('bar-top').style.width = top + '%';
+  document.getElementById('bar-rec').style.width = rec + '%';
+}
+
+// ── Load Status & Settings ───────────────────────────────────────────────────
+
+async function init() {
+  const auth = await fetch('/auth/status').then(r => r.json());
+  if (!auth.authenticated) {
+    document.getElementById('login-overlay').style.display = 'flex';
+    return;
+  }
+  if (auth.user) {
+    const u = auth.user;
+    document.getElementById('header-user').style.display = 'flex';
+    document.getElementById('user-name').textContent = u.name || u.id;
+    if (u.image) document.getElementById('user-img').src = u.image;
+  }
+  await loadSettings();
+  await loadStatus();
+  await loadSelectedPodcasts();
+}
+
+async function loadStatus() {
+  const s = await fetch('/api/status').then(r => r.json());
+  document.getElementById('last-build').textContent = s.last_build ? formatDate(s.last_build) : '—';
+  document.getElementById('next-run').textContent = s.next_run ? formatDate(s.next_run) : '—';
+  const link = document.getElementById('playlist-link');
+  if (s.playlist_url) {
+    link.innerHTML = `<a class="playlist-link" href="${s.playlist_url}" target="_blank">Auf Spotify öffnen ↗</a>`;
+  } else {
+    link.textContent = 'Noch nicht erstellt';
+  }
+}
+
+async function loadSettings() {
+  settings = await fetch('/api/settings').then(r => r.json());
+  document.getElementById('total-tracks').value = settings.total_tracks || 30;
+  document.getElementById('lbl-total').textContent = settings.total_tracks || 30;
+  const top = Math.round((settings.top_tracks_ratio || 0.4) * 100);
+  const rec = Math.round((settings.recommendations_ratio || 0.4) * 100);
+  document.getElementById('top-ratio').value = top;
+  document.getElementById('rec-ratio').value = rec;
+  document.getElementById('lbl-top').textContent = top + '%';
+  document.getElementById('lbl-rec').textContent = rec + '%';
+  updateRatioBars();
+  document.getElementById('podcast-eps').value = settings.podcast_episodes ?? 4;
+  document.getElementById('lbl-eps').textContent = settings.podcast_episodes ?? 4;
+  document.getElementById('schedule-time').value = settings.schedule_time || '06:00';
+}
+
+async function saveSettings() {
+  const body = {
+    total_tracks: parseInt(document.getElementById('total-tracks').value),
+    top_tracks_ratio: parseInt(document.getElementById('top-ratio').value) / 100,
+    recommendations_ratio: parseInt(document.getElementById('rec-ratio').value) / 100,
+    podcast_episodes: parseInt(document.getElementById('podcast-eps').value),
+    schedule_time: document.getElementById('schedule-time').value,
+  };
+  await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  showBuildStatus('Einstellungen gespeichert', 'success');
+}
+
+// ── Build ────────────────────────────────────────────────────────────────────
+
+async function triggerBuild() {
+  const btn = document.getElementById('build-btn');
+  const status = document.getElementById('build-status');
+  btn.disabled = true;
+  status.className = 'build-status';
+  status.innerHTML = '<span class="spinner"></span>Wird erstellt…';
+  try {
+    const result = await fetch('/api/build', { method: 'POST' }).then(r => r.json());
+    if (result.ok) {
+      status.className = 'build-status success';
+      status.textContent = `✓ ${result.total} Elemente — Tracks: ${result.tracks}, Episoden: ${result.episodes}`;
+      await loadStatus();
+    } else {
+      status.className = 'build-status error';
+      status.textContent = '✗ ' + (result.detail || 'Fehler');
+    }
+  } catch (e) {
+    status.className = 'build-status error';
+    status.textContent = '✗ Netzwerkfehler';
+  }
+  btn.disabled = false;
+}
+
+function showBuildStatus(msg, type) {
+  const el = document.getElementById('build-status');
+  el.className = 'build-status ' + type;
+  el.textContent = msg;
+  setTimeout(() => el.textContent = '', 3000);
+}
+
+// ── Podcasts ─────────────────────────────────────────────────────────────────
+
+async function loadSelectedPodcasts() {
+  const data = await fetch('/api/podcasts/selected').then(r => r.json());
+  selectedPodcasts = data.podcasts || [];
+  renderSelected();
+}
+
+async function searchPodcasts() {
+  const q = document.getElementById('podcast-query').value.trim();
+  if (!q) return;
+  const container = document.getElementById('search-results');
+  container.innerHTML = '<span class="spinner"></span>';
+  const data = await fetch('/api/podcasts/search?q=' + encodeURIComponent(q)).then(r => r.json());
+  const shows = data.shows || [];
+  if (!shows.length) {
+    container.innerHTML = '<p class="no-results">Keine Ergebnisse gefunden.</p>';
+    return;
+  }
+  container.innerHTML = '';
+  for (const show of shows) {
+    const alreadySelected = selectedPodcasts.some(s => s.id === show.id);
+    const item = document.createElement('div');
+    item.className = 'show-item';
+    item.innerHTML = `
+      <img src="${show.image_url || ''}" alt="" onerror="this.style.display='none'" />
+      <div class="show-info">
+        <div class="show-name">${esc(show.name)}</div>
+        <div class="show-pub">${esc(show.publisher)}</div>
+      </div>
+      <button class="btn btn-outline" onclick="togglePodcast(${JSON.stringify(JSON.stringify(show))}, this)">
+        ${alreadySelected ? 'Entfernen' : 'Hinzufügen'}
+      </button>`;
+    container.appendChild(item);
+  }
+}
+
+async function togglePodcast(showJson, btn) {
+  const show = JSON.parse(showJson);
+  const idx = selectedPodcasts.findIndex(s => s.id === show.id);
+  if (idx >= 0) {
+    selectedPodcasts.splice(idx, 1);
+    btn.textContent = 'Hinzufügen';
+  } else {
+    selectedPodcasts.push({ id: show.id, name: show.name, publisher: show.publisher, image_url: show.image_url });
+    btn.textContent = 'Entfernen';
+  }
+  await savePodcasts();
+  renderSelected();
+}
+
+async function removePodcast(id) {
+  selectedPodcasts = selectedPodcasts.filter(s => s.id !== id);
+  await savePodcasts();
+  renderSelected();
+  // Update search results buttons if visible
+  document.querySelectorAll('#search-results .show-item').forEach(item => {
+    const btn = item.querySelector('button');
+    const name = item.querySelector('.show-name').textContent;
+    const match = selectedPodcasts.find(s => s.name === name);
+    if (btn) btn.textContent = match ? 'Entfernen' : 'Hinzufügen';
+  });
+}
+
+async function savePodcasts() {
+  await fetch('/api/podcasts/selected', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ podcasts: selectedPodcasts }),
+  });
+}
+
+function renderSelected() {
+  const list = document.getElementById('selected-list');
+  const divider = document.getElementById('selected-divider');
+  const label = document.getElementById('selected-podcasts-label');
+  if (!selectedPodcasts.length) {
+    list.innerHTML = '';
+    divider.style.display = 'none';
+    label.style.display = 'none';
+    return;
+  }
+  divider.style.display = '';
+  label.style.display = '';
+  list.innerHTML = '';
+  for (const show of selectedPodcasts) {
+    const item = document.createElement('div');
+    item.className = 'show-item';
+    item.innerHTML = `
+      <img src="${show.image_url || ''}" alt="" onerror="this.style.display='none'" />
+      <div class="show-info">
+        <div class="show-name">${esc(show.name)}</div>
+        <div class="show-pub">${esc(show.publisher || '')}</div>
+      </div>
+      <button class="btn btn-danger" onclick="removePodcast('${show.id}')">Entfernen</button>`;
+    list.appendChild(item);
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function esc(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatDate(iso) {
+  try {
+    return new Date(iso).toLocaleString('de-DE', { dateStyle:'short', timeStyle:'short' });
+  } catch { return iso; }
+}
+
+init();
+</script>
+</body>
+</html>
