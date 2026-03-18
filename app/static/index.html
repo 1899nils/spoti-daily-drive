@@ -117,6 +117,29 @@
   .ratio-legend .top-color::before { color: var(--green); }
   .ratio-legend .rec-color::before { color: #1aa3ff; }
 
+  /* stats.fm section */
+  .statsfm-status {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    margin-top: .8rem;
+    font-size: .88rem;
+  }
+  .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot-green { background: var(--green); }
+  .dot-grey  { background: var(--text-muted); }
+  .statsfm-hint {
+    font-size: .78rem;
+    color: var(--text-muted);
+    margin-top: .5rem;
+    line-height: 1.5;
+  }
+  .statsfm-hint a { color: var(--green); }
+
   /* Podcast section */
   .search-row { display: flex; gap: .5rem; }
   .search-row input { flex: 1; }
@@ -268,6 +291,29 @@
     </div>
   </div>
 
+  <!-- stats.fm -->
+  <div class="card">
+    <h2>stats.fm Anbindung</h2>
+    <p class="statsfm-hint">
+      Verbinde deinen <a href="https://stats.fm" target="_blank">stats.fm</a>-Account, um die Playlist auf Basis
+      deiner echten Hörstatistiken (Play-Counts, Hörzeit) zu erstellen — präziser als Spotifys eigenes Ranking.<br>
+      Token findest du unter: <strong>stats.fm → Profil → Einstellungen → Zugangstoken</strong>
+    </p>
+
+    <div class="setting-row" style="margin-top:.9rem">
+      <label>Access Token</label>
+      <div style="display:flex;gap:.5rem">
+        <input type="password" id="sfm-token" placeholder="Hier einfügen…" autocomplete="off" style="flex:1" />
+        <button class="btn btn-outline" onclick="connectStatsfm()">Verbinden</button>
+      </div>
+    </div>
+
+    <div class="statsfm-status" id="sfm-status" style="display:none">
+      <span class="dot dot-grey" id="sfm-dot"></span>
+      <span id="sfm-status-text">Nicht verbunden</span>
+    </div>
+  </div>
+
   <!-- Podcast Selection -->
   <div class="card">
     <h2>Podcasts auswählen</h2>
@@ -327,6 +373,7 @@ async function init() {
   await loadSettings();
   await loadStatus();
   await loadSelectedPodcasts();
+  await loadStatsfmStatus();
 }
 
 async function loadStatus() {
@@ -355,6 +402,9 @@ async function loadSettings() {
   document.getElementById('podcast-eps').value = settings.podcast_episodes ?? 4;
   document.getElementById('lbl-eps').textContent = settings.podcast_episodes ?? 4;
   document.getElementById('schedule-time').value = settings.schedule_time || '06:00';
+  if (settings.statsfm_token) {
+    document.getElementById('sfm-token').placeholder = '••••••••••••••••';
+  }
 }
 
 async function saveSettings() {
@@ -497,6 +547,62 @@ function renderSelected() {
       </div>
       <button class="btn btn-danger" onclick="removePodcast('${show.id}')">Entfernen</button>`;
     list.appendChild(item);
+  }
+}
+
+// ── stats.fm ──────────────────────────────────────────────────────────────────
+
+async function loadStatsfmStatus() {
+  const data = await fetch('/api/statsfm/status').then(r => r.json()).catch(() => null);
+  if (!data) return;
+  const statusEl = document.getElementById('sfm-status');
+  const dot = document.getElementById('sfm-dot');
+  const text = document.getElementById('sfm-status-text');
+  statusEl.style.display = 'flex';
+  if (data.connected && data.user) {
+    dot.className = 'dot dot-green';
+    text.textContent = 'Verbunden als ' + (data.user.name || data.user.id);
+  } else {
+    dot.className = 'dot dot-grey';
+    text.textContent = 'Nicht verbunden';
+  }
+}
+
+async function connectStatsfm() {
+  const token = document.getElementById('sfm-token').value.trim();
+  if (!token) return;
+
+  // Resolve user ID by validating token first (API will tell us the user)
+  const statusEl = document.getElementById('sfm-status');
+  const dot = document.getElementById('sfm-dot');
+  const text = document.getElementById('sfm-status-text');
+  statusEl.style.display = 'flex';
+  dot.className = 'dot dot-grey';
+  text.innerHTML = '<span class="spinner"></span>Verbinde…';
+
+  // Save token (user_id will be resolved server-side via /me)
+  await fetch('/api/settings', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ statsfm_token: token }),
+  });
+
+  // Fetch status to verify + get user name
+  const data = await fetch('/api/statsfm/status').then(r => r.json()).catch(() => null);
+  if (data && data.connected && data.user) {
+    dot.className = 'dot dot-green';
+    text.textContent = 'Verbunden als ' + (data.user.name || data.user.id);
+    // Persist user ID so builder can use it
+    await fetch('/api/settings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ statsfm_user_id: data.user.id }),
+    });
+    document.getElementById('sfm-token').value = '';
+    document.getElementById('sfm-token').placeholder = '••••••••••••••••';
+  } else {
+    dot.className = 'dot dot-grey';
+    text.textContent = 'Verbindung fehlgeschlagen — Token prüfen';
   }
 }
 

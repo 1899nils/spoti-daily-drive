@@ -5,6 +5,7 @@ import random
 from datetime import datetime, timezone
 
 from . import spotify as sp_api
+from . import statsfm as sfm_api
 from .auth import get_spotify
 from .config import load_config, save_config
 
@@ -47,26 +48,42 @@ def build_playlist() -> dict:
     top_count = max(1, int(total_tracks * top_ratio))
     rec_count = max(1, int(total_tracks * rec_ratio))
 
-    # Fetch top tracks (mix recent + long-term)
-    short_term = sp_api.get_top_tracks(sp, "short_term", limit=min(top_count, 50))
-    long_term = sp_api.get_top_tracks(sp, "long_term", limit=min(top_count, 50))
+    sfm_token: str | None = config.get("statsfm_token")
+    sfm_user_id: str | None = config.get("statsfm_user_id")
 
-    # Combine and deduplicate, alternating sources for variety
     seen: set[str] = set()
     top_tracks: list[str] = []
-    for a, b in zip(short_term, long_term):
-        for uri in (a, b):
+
+    if sfm_token and sfm_user_id:
+        # Primary source: stats.fm — sorted by actual stream count
+        recent = sfm_api.get_top_tracks(sfm_token, sfm_user_id, range="months", limit=50)
+        alltime = sfm_api.get_top_tracks(sfm_token, sfm_user_id, range="lifetime", limit=50)
+
+        # Interleave recent + all-time for variety, dedup, cap at top_count
+        for a, b in zip(recent, alltime):
+            for uri in (a, b):
+                if uri not in seen and len(top_tracks) < top_count:
+                    seen.add(uri)
+                    top_tracks.append(uri)
+        for uri in recent + alltime:
+            if uri not in seen and len(top_tracks) < top_count:
+                seen.add(uri)
+                top_tracks.append(uri)
+    else:
+        # Fallback: Spotify's own top tracks (no stream counts)
+        short_term = sp_api.get_top_tracks(sp, "short_term", limit=min(top_count, 50))
+        long_term = sp_api.get_top_tracks(sp, "long_term", limit=min(top_count, 50))
+        for a, b in zip(short_term, long_term):
+            for uri in (a, b):
+                if uri not in seen and len(top_tracks) < top_count:
+                    seen.add(uri)
+                    top_tracks.append(uri)
+        for uri in short_term + long_term:
             if uri not in seen and len(top_tracks) < top_count:
                 seen.add(uri)
                 top_tracks.append(uri)
 
-    # Fill remaining from either source
-    for uri in short_term + long_term:
-        if uri not in seen and len(top_tracks) < top_count:
-            seen.add(uri)
-            top_tracks.append(uri)
-
-    # Recommendations seeded from top tracks
+    # Fill remaining slots with artist-based search (replaces removed /recommendations)
     rec_tracks = sp_api.get_recommendations(sp, top_tracks, limit=rec_count)
     # Deduplicate against top tracks
     rec_tracks = [u for u in rec_tracks if u not in seen]

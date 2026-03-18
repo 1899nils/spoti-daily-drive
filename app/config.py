@@ -16,6 +16,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "selected_podcasts": [],
     "playlist_id": None,
     "last_build": None,
+    "statsfm_token": None,
+    "statsfm_user_id": None,
 }
 
 

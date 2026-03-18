@@ -19,6 +19,7 @@ from .builder import build_playlist
 from .config import load_config, save_config
 from .scheduler import schedule_daily, start_scheduler
 from . import spotify as sp_api
+from . import statsfm as sfm_api
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -86,7 +87,8 @@ async def get_settings():
 async def update_settings(body: dict[str, Any]):
     config = load_config()
     allowed = {"total_tracks", "top_tracks_ratio", "recommendations_ratio",
-               "podcast_episodes", "schedule_time", "playlist_name"}
+               "podcast_episodes", "schedule_time", "playlist_name",
+               "statsfm_token", "statsfm_user_id"}
     for key in allowed:
         if key in body:
             config[key] = body[key]
@@ -95,6 +97,27 @@ async def update_settings(body: dict[str, Any]):
     if "schedule_time" in body:
         schedule_daily(config["schedule_time"])
     return {"ok": True, "config": config}
+
+
+# ── stats.fm ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/statsfm/status")
+async def statsfm_status():
+    config = load_config()
+    token = config.get("statsfm_token")
+    if not token:
+        return {"connected": False, "user": None}
+    user = await asyncio.to_thread(sfm_api.validate_token, token)
+    if user is None:
+        return {"connected": False, "user": None}
+    return {
+        "connected": True,
+        "user": {
+            "id": user.get("id") or user.get("customId"),
+            "name": user.get("displayName") or user.get("id"),
+            "image": user.get("image"),
+        },
+    }
 
 
 # ── Podcasts ──────────────────────────────────────────────────────────────────
