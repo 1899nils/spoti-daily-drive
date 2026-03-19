@@ -45,9 +45,10 @@ def build_playlist() -> dict:
     podcast_count = config["podcast_episodes"]
     selected_podcasts = config["selected_podcasts"]
 
-    # How many tracks from each source
+    # How many tracks from each source.
+    # rec_count requests the full total so filters don't shrink the final playlist.
     top_count = max(1, int(total_tracks * top_ratio))
-    rec_count = max(1, int(total_tracks * rec_ratio))
+    rec_count = total_tracks
 
     # Date-seeded RNG: same result within one day, different every day
     day_rng = Random(date.today().isoformat())
@@ -97,30 +98,30 @@ def build_playlist() -> dict:
     seen = set(top_tracks)  # update seen to only the selected tracks
 
     # Fill remaining slots with tracks from similar (related) artists
-    rec_tracks = sp_api.get_similar_tracks(sp, top_tracks, limit=rec_count)
+    rec_tracks = sp_api.get_similar_tracks(sp, top_tracks, limit=rec_count, rng=day_rng)
     # Deduplicate against top tracks
     rec_tracks = [u for u in rec_tracks if u not in seen]
 
     # Combine music tracks and shuffle slightly for freshness
     music_uris = top_tracks + rec_tracks
     random.shuffle(music_uris)
-    music_uris = music_uris[:total_tracks]
 
-    # Remove tracks by excluded artists
+    # Apply filters BEFORE truncating so excluded tracks don't shrink the playlist
     excluded_artist_ids: set[str] = {a["id"] for a in config.get("excluded_artists", [])}
     if excluded_artist_ids:
         music_uris = sp_api.filter_excluded_artists(sp, music_uris, excluded_artist_ids)
 
-    # Remove individually excluded tracks
     excluded_track_ids: set[str] = {t["id"] for t in config.get("excluded_tracks", [])}
     if excluded_track_ids:
         music_uris = [u for u in music_uris if u.split(":")[-1] not in excluded_track_ids]
 
-    # Remove tracks that appear in excluded playlists
     excluded_playlist_ids: list[str] = config.get("excluded_playlist_ids", [])
     if excluded_playlist_ids:
         blocked_track_ids: set[str] = sp_api.get_playlist_track_ids(sp, excluded_playlist_ids)
         music_uris = [u for u in music_uris if u.split(":")[-1] not in blocked_track_ids]
+
+    # Truncate to target count after filtering
+    music_uris = music_uris[:total_tracks]
 
     # Fetch today's podcast episodes; favorites play first, rest interleaved
     fav_episodes: list[str] = []
