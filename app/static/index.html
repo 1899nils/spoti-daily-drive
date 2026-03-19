@@ -991,7 +991,9 @@ function renderSelected() {
   divider.style.display = '';
   label.style.display = '';
   list.innerHTML = '';
-  for (const show of selectedPodcasts) {
+  // Sort: favorites first
+  const sorted = [...selectedPodcasts].sort((a, b) => (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0));
+  for (const show of sorted) {
     const item = document.createElement('div');
     item.className = 'show-item';
     item.innerHTML = `
@@ -1000,9 +1002,19 @@ function renderSelected() {
         <div class="show-name">${esc(show.name)}</div>
         <div class="show-pub">${esc(show.publisher || '')}</div>
       </div>
+      <button class="btn btn-outline" title="${show.is_favorite ? 'Favorit entfernen' : 'Als Favorit markieren (spielt zuerst)'}"
+        onclick="toggleFavoritePodcast('${esc(show.id)}')" style="font-size:1.1rem;padding:.3rem .55rem">${show.is_favorite ? '⭐' : '☆'}</button>
       <button class="btn btn-danger" onclick="removePodcast('${show.id}')">Entfernen</button>`;
     list.appendChild(item);
   }
+}
+
+async function toggleFavoritePodcast(id) {
+  const show = selectedPodcasts.find(s => s.id === id);
+  if (!show) return;
+  show.is_favorite = !show.is_favorite;
+  await savePodcasts();
+  renderSelected();
 }
 
 // ── stats.fm ──────────────────────────────────────────────────────────────────

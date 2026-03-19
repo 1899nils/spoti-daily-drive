@@ -102,6 +102,9 @@ def get_latest_episodes(
             continue
         if today_only and ep.get("release_date", "") != today:
             continue
+        # Skip episodes the user has already fully listened to
+        if ep.get("resume_point", {}).get("fully_played", False):
+            continue
         uris.append(ep["uri"])
     return uris
 
