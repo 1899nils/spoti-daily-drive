@@ -98,7 +98,7 @@ def build_playlist() -> dict:
     seen = set(top_tracks)  # update seen to only the selected tracks
 
     # Fill remaining slots with tracks from similar (related) artists
-    rec_tracks = sp_api.get_similar_tracks(sp, top_tracks, limit=rec_count)
+    rec_tracks = sp_api.get_similar_tracks(sp, top_tracks, limit=rec_count, rng=day_rng)
     # Deduplicate against top tracks
     rec_tracks = [u for u in rec_tracks if u not in seen]
 

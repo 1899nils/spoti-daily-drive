@@ -14,12 +14,22 @@ def get_top_tracks(sp: spotipy.Spotify, time_range: str, limit: int) -> list[str
     return [item["uri"] for item in results["items"] if item]
 
 
-def get_similar_tracks(sp: spotipy.Spotify, seed_uris: list[str], limit: int) -> list[str]:
+def get_similar_tracks(
+    sp: spotipy.Spotify,
+    seed_uris: list[str],
+    limit: int,
+    rng: random.Random | None = None,
+) -> list[str]:
     """Return track URIs from artists similar to the user's top artists.
 
     Uses Spotify's related-artists endpoint to find genuinely similar music
     rather than just more tracks from the same artists.
+
+    Pass a date-seeded ``rng`` to get consistent daily variety (same result
+    within a day, different every day).
     """
+    if rng is None:
+        rng = random.Random()
     if limit <= 0:
         return []
 
@@ -36,21 +46,24 @@ def get_similar_tracks(sp: spotipy.Spotify, seed_uris: list[str], limit: int) ->
     top_artist_ids = {a["id"] for a in top_artists}
     seen_artist_ids = set(top_artist_ids)
 
-    # For each top artist, fetch related artists
+    # For each top artist, fetch related artists (take more for a bigger pool)
     related_artists: list[dict] = []
-    for artist in top_artists[:4]:
+    for artist in top_artists[:5]:
         try:
             rel = sp.artist_related_artists(artist["id"])["artists"]
-            for ra in rel[:4]:
+            for ra in rel[:6]:
                 if ra["id"] not in seen_artist_ids:
                     seen_artist_ids.add(ra["id"])
                     related_artists.append(ra)
         except Exception:
             continue
 
-    random.shuffle(related_artists)
+    # Daily-seeded shuffle → different artists each day, stable within a day
+    rng.shuffle(related_artists)
 
-    # Collect tracks from related artists via search
+    # Collect tracks from related artists via search.
+    # Fetch more than needed per artist and daily-sample so it's not always
+    # the same popular hits.
     collected: list[str] = []
     seen_track_ids = {uri.split(":")[-1] for uri in seed_uris}
 
@@ -59,16 +72,22 @@ def get_similar_tracks(sp: spotipy.Spotify, seed_uris: list[str], limit: int) ->
             break
         try:
             results = sp.search(
-                q=f'artist:"{artist["name"]}"', type="track", limit=8, market="from_token"
+                q=f'artist:"{artist["name"]}"', type="track", limit=10, market="from_token"
             )
-            for track in results["tracks"]["items"]:
-                if track["id"] not in seen_track_ids and len(collected) < limit:
-                    seen_track_ids.add(track["id"])
-                    collected.append(track["uri"])
+            candidates = [
+                t["uri"]
+                for t in results["tracks"]["items"]
+                if t["id"] not in seen_track_ids
+            ]
+            # Daily-sample up to 3 tracks per artist for variety
+            picks = rng.sample(candidates, min(3, len(candidates)))
+            for uri in picks:
+                seen_track_ids.add(uri.split(":")[-1])
+                collected.append(uri)
         except Exception:
             continue
 
-    random.shuffle(collected)
+    rng.shuffle(collected)
     return collected[:limit]
 
 
