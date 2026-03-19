@@ -9,7 +9,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 load_dotenv()  # picks up .env in cwd when running locally
@@ -104,6 +104,43 @@ async def update_settings(body: dict[str, Any]):
     return {"ok": True, "config": config}
 
 
+# ── Settings backup / restore ────────────────────────────────────────────────
+
+@app.get("/api/settings/export")
+async def export_settings():
+    config = load_config()
+    # Strip runtime-only fields that shouldn't be restored blindly
+    export_keys = {
+        "playlist_name", "total_tracks", "top_tracks_ratio", "recommendations_ratio",
+        "podcast_episodes", "schedule_times", "selected_podcasts",
+        "statsfm_user_id", "statsfm_display_name", "excluded_artists",
+        "excluded_tracks", "excluded_playlist_ids",
+    }
+    payload = {k: v for k, v in config.items() if k in export_keys}
+    return JSONResponse(
+        content=payload,
+        headers={"Content-Disposition": 'attachment; filename="daily-drive-settings.json"'},
+    )
+
+
+@app.post("/api/settings/import")
+async def import_settings(body: dict[str, Any]):
+    config = load_config()
+    importable = {
+        "playlist_name", "total_tracks", "top_tracks_ratio", "recommendations_ratio",
+        "podcast_episodes", "schedule_times", "selected_podcasts",
+        "statsfm_user_id", "statsfm_display_name", "excluded_artists",
+        "excluded_tracks", "excluded_playlist_ids",
+    }
+    for key in importable:
+        if key in body:
+            config[key] = body[key]
+    save_config(config)
+    if "schedule_times" in body:
+        schedule_all(config["schedule_times"])
+    return {"ok": True}
+
+
 # ── stats.fm ─────────────────────────────────────────────────────────────────
 
 @app.get("/api/statsfm/resolve")
@@ -156,6 +193,54 @@ async def set_selected_podcasts(body: dict[str, Any]):
     config["selected_podcasts"] = podcasts
     save_config(config)
     return {"ok": True, "podcasts": podcasts}
+
+
+# ── Excluded Tracks ───────────────────────────────────────────────────────────
+
+@app.get("/api/tracks/search")
+async def search_tracks(q: str = Query(..., min_length=1)):
+    sp = get_spotify()
+    if sp is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return {"tracks": sp_api.search_tracks(sp, q)}
+
+
+@app.get("/api/excluded-tracks")
+async def get_excluded_tracks():
+    return {"tracks": load_config().get("excluded_tracks", [])}
+
+
+@app.post("/api/excluded-tracks")
+async def set_excluded_tracks(body: dict[str, Any]):
+    tracks = body.get("tracks", [])
+    config = load_config()
+    config["excluded_tracks"] = tracks
+    save_config(config)
+    return {"ok": True, "tracks": tracks}
+
+
+# ── Excluded Playlists ────────────────────────────────────────────────────────
+
+@app.get("/api/playlists/search")
+async def search_playlists(q: str = Query(..., min_length=1)):
+    sp = get_spotify()
+    if sp is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return {"playlists": sp_api.search_playlists(sp, q)}
+
+
+@app.get("/api/excluded-playlists")
+async def get_excluded_playlists():
+    return {"playlists": load_config().get("excluded_playlist_ids", [])}
+
+
+@app.post("/api/excluded-playlists")
+async def set_excluded_playlists(body: dict[str, Any]):
+    playlist_ids = body.get("playlist_ids", [])
+    config = load_config()
+    config["excluded_playlist_ids"] = playlist_ids
+    save_config(config)
+    return {"ok": True, "playlist_ids": playlist_ids}
 
 
 # ── Excluded Artists ──────────────────────────────────────────────────────────

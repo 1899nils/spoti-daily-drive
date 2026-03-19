@@ -93,9 +93,20 @@ def build_playlist() -> dict:
     music_uris = music_uris[:total_tracks]
 
     # Remove tracks by excluded artists
-    excluded_ids: set[str] = {a["id"] for a in config.get("excluded_artists", [])}
-    if excluded_ids:
-        music_uris = sp_api.filter_excluded_artists(sp, music_uris, excluded_ids)
+    excluded_artist_ids: set[str] = {a["id"] for a in config.get("excluded_artists", [])}
+    if excluded_artist_ids:
+        music_uris = sp_api.filter_excluded_artists(sp, music_uris, excluded_artist_ids)
+
+    # Remove individually excluded tracks
+    excluded_track_ids: set[str] = {t["id"] for t in config.get("excluded_tracks", [])}
+    if excluded_track_ids:
+        music_uris = [u for u in music_uris if u.split(":")[-1] not in excluded_track_ids]
+
+    # Remove tracks that appear in excluded playlists
+    excluded_playlist_ids: list[str] = config.get("excluded_playlist_ids", [])
+    if excluded_playlist_ids:
+        blocked_track_ids: set[str] = sp_api.get_playlist_track_ids(sp, excluded_playlist_ids)
+        music_uris = [u for u in music_uris if u.split(":")[-1] not in blocked_track_ids]
 
     # Fetch today's podcast episode for each show (skip shows without a new episode today)
     episodes: list[str] = []

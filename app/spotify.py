@@ -144,6 +144,40 @@ def replace_playlist_tracks(sp: spotipy.Spotify, playlist_id: str, uris: list[st
         sp.playlist_add_items(playlist_id, uris[i:i + 100])
 
 
+def search_tracks(sp: spotipy.Spotify, query: str, limit: int = 10) -> list[dict[str, str]]:
+    """Search for tracks and return [{id, name, artist, image_url}]."""
+    results = sp.search(q=query, type="track", limit=limit, market="from_token")
+    tracks = []
+    for item in results["tracks"]["items"]:
+        image_url = item["album"]["images"][0]["url"] if item["album"].get("images") else ""
+        artists = ", ".join(a["name"] for a in item.get("artists", []))
+        tracks.append({
+            "id": item["id"],
+            "name": item["name"],
+            "artist": artists,
+            "image_url": image_url,
+        })
+    return tracks
+
+
+def search_playlists(sp: spotipy.Spotify, query: str, limit: int = 10) -> list[dict[str, str]]:
+    """Search for playlists and return [{id, name, owner, image_url, track_count}]."""
+    results = sp.search(q=query, type="playlist", limit=limit, market="from_token")
+    playlists = []
+    for item in results["playlists"]["items"]:
+        if not item:
+            continue
+        image_url = item["images"][0]["url"] if item.get("images") else ""
+        playlists.append({
+            "id": item["id"],
+            "name": item["name"],
+            "owner": item["owner"]["display_name"],
+            "image_url": image_url,
+            "track_count": item["tracks"]["total"],
+        })
+    return playlists
+
+
 def search_artists(sp: spotipy.Spotify, query: str, limit: int = 10) -> list[dict[str, str]]:
     """Search for artists and return [{id, name, image_url, genres}]."""
     results = sp.search(q=query, type="artist", limit=limit, market="from_token")
@@ -157,6 +191,28 @@ def search_artists(sp: spotipy.Spotify, query: str, limit: int = 10) -> list[dic
             "genres": ", ".join(item.get("genres", [])[:3]),
         })
     return artists
+
+
+def get_playlist_track_ids(sp: spotipy.Spotify, playlist_ids: list[str]) -> set[str]:
+    """Return the set of track IDs contained in any of the given playlists."""
+    track_ids: set[str] = set()
+    for pl_id in playlist_ids:
+        offset = 0
+        while True:
+            try:
+                results = sp.playlist_tracks(
+                    pl_id, fields="items(track(id)),next", limit=100, offset=offset
+                )
+            except Exception:
+                break
+            for item in results.get("items", []):
+                track = item.get("track")
+                if track and track.get("id"):
+                    track_ids.add(track["id"])
+            if results.get("next") is None:
+                break
+            offset += 100
+    return track_ids
 
 
 def filter_excluded_artists(

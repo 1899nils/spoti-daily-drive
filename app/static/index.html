@@ -314,6 +314,13 @@
     <div class="save-row">
       <button class="btn" onclick="saveSettings()">Speichern</button>
     </div>
+    <div style="margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap">
+      <button class="btn btn-outline" onclick="exportSettings()" title="Einstellungen als JSON-Datei herunterladen">⬇ Einstellungen exportieren</button>
+      <label class="btn btn-outline" style="cursor:pointer" title="Gesicherte JSON-Datei wiederherstellen">
+        ⬆ Einstellungen importieren
+        <input type="file" accept=".json" style="display:none" onchange="importSettings(event)" />
+      </label>
+    </div>
   </div>
 
   <!-- stats.fm -->
@@ -354,6 +361,40 @@
     <div class="section-divider" id="excluded-divider" style="display:none"></div>
     <div id="excluded-artists-label" style="display:none;font-size:.8rem;color:var(--text-muted);margin-bottom:.5rem">Gesperrt</div>
     <div id="excluded-artists-list" class="show-list"></div>
+  </div>
+
+  <!-- Excluded Tracks -->
+  <div class="card">
+    <h2>Songs sperren</h2>
+    <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:.9rem">
+      Einzelne Songs, die nie in die Playlist aufgenommen werden sollen.
+    </p>
+    <div class="search-row">
+      <input type="text" id="track-query" placeholder="Song suchen…" onkeydown="if(event.key==='Enter')searchTracks()" />
+      <button class="btn" onclick="searchTracks()">Suchen</button>
+    </div>
+    <div id="track-search-results" class="show-list"></div>
+
+    <div class="section-divider" id="excluded-tracks-divider" style="display:none"></div>
+    <div id="excluded-tracks-label" style="display:none;font-size:.8rem;color:var(--text-muted);margin-bottom:.5rem">Gesperrt</div>
+    <div id="excluded-tracks-list" class="show-list"></div>
+  </div>
+
+  <!-- Excluded Playlists -->
+  <div class="card">
+    <h2>Playlist sperren</h2>
+    <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:.9rem">
+      Alle Tracks aus diesen Playlists werden beim Build herausgefiltert.
+    </p>
+    <div class="search-row">
+      <input type="text" id="playlist-query" placeholder="Playlist suchen…" onkeydown="if(event.key==='Enter')searchExcludedPlaylists()" />
+      <button class="btn" onclick="searchExcludedPlaylists()">Suchen</button>
+    </div>
+    <div id="playlist-search-results" class="show-list"></div>
+
+    <div class="section-divider" id="excluded-playlists-divider" style="display:none"></div>
+    <div id="excluded-playlists-label" style="display:none;font-size:.8rem;color:var(--text-muted);margin-bottom:.5rem">Gesperrt</div>
+    <div id="excluded-playlists-list" class="show-list"></div>
   </div>
 
   <!-- Podcast Selection -->
@@ -450,6 +491,8 @@ async function init() {
   await loadStatus();
   await loadSelectedPodcasts();
   await loadExcludedArtists();
+  await loadExcludedTracks();
+  await loadExcludedPlaylists();
   loadStatsfmStatus();
 }
 
@@ -624,6 +667,240 @@ async function removeExcludedArtist(id) {
     const btn = item.querySelector('button');
     const data = JSON.parse(item.dataset.artistJson || '{}');
     if (data.id === id) btn.textContent = 'Sperren';
+  });
+}
+
+// ── Settings Export / Import ─────────────────────────────────────────────────
+
+async function exportSettings() {
+  const resp = await fetch('/api/settings/export');
+  const blob = await resp.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'daily-drive-settings.json';
+  a.click();
+}
+
+async function importSettings(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    const resp = await fetch('/api/settings/import', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data),
+    });
+    if (!resp.ok) throw new Error('Import fehlgeschlagen');
+    // Reload everything
+    await loadSettings();
+    await loadSelectedPodcasts();
+    await loadExcludedArtists();
+    await loadExcludedTracks();
+    await loadExcludedPlaylists();
+    alert('Einstellungen erfolgreich importiert!');
+  } catch (e) {
+    alert('Fehler beim Import: ' + e.message);
+  }
+  event.target.value = '';
+}
+
+// ── Excluded Tracks ───────────────────────────────────────────────────────────
+
+let excludedTracks = [];
+
+async function loadExcludedTracks() {
+  const data = await fetch('/api/excluded-tracks').then(r => r.json());
+  excludedTracks = data.tracks || [];
+  renderExcludedTracks();
+}
+
+function renderExcludedTracks() {
+  const list = document.getElementById('excluded-tracks-list');
+  const divider = document.getElementById('excluded-tracks-divider');
+  const label = document.getElementById('excluded-tracks-label');
+  list.innerHTML = '';
+  if (!excludedTracks.length) {
+    divider.style.display = 'none';
+    label.style.display = 'none';
+    return;
+  }
+  divider.style.display = '';
+  label.style.display = '';
+  for (const track of excludedTracks) {
+    const item = document.createElement('div');
+    item.className = 'show-item';
+    item.innerHTML = `
+      <img src="${esc(track.image_url || '')}" alt="" onerror="this.style.display='none'" />
+      <div class="show-info">
+        <div class="show-name">${esc(track.name)}</div>
+        <div class="show-pub">${esc(track.artist || '')}</div>
+      </div>
+      <button class="btn btn-outline" onclick="removeExcludedTrack('${esc(track.id)}')">Entfernen</button>`;
+    list.appendChild(item);
+  }
+}
+
+async function saveExcludedTracks() {
+  await fetch('/api/excluded-tracks', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ tracks: excludedTracks }),
+  });
+}
+
+async function searchTracks() {
+  const q = document.getElementById('track-query').value.trim();
+  if (!q) return;
+  const container = document.getElementById('track-search-results');
+  container.innerHTML = '<span class="spinner"></span>';
+  const data = await fetch('/api/tracks/search?q=' + encodeURIComponent(q)).then(r => r.json());
+  const tracks = data.tracks || [];
+  if (!tracks.length) {
+    container.innerHTML = '<p class="no-results">Keine Ergebnisse gefunden.</p>';
+    return;
+  }
+  container.innerHTML = '';
+  for (const track of tracks) {
+    const alreadyBlocked = excludedTracks.some(t => t.id === track.id);
+    const item = document.createElement('div');
+    item.className = 'show-item';
+    item.dataset.trackJson = JSON.stringify(track);
+    item.innerHTML = `
+      <img src="${esc(track.image_url || '')}" alt="" onerror="this.style.display='none'" />
+      <div class="show-info">
+        <div class="show-name">${esc(track.name)}</div>
+        <div class="show-pub">${esc(track.artist || '')}</div>
+      </div>
+      <button class="btn btn-outline">${alreadyBlocked ? 'Entsperren' : 'Sperren'}</button>`;
+    item.querySelector('button').addEventListener('click', function() {
+      toggleExcludedTrack(item.dataset.trackJson, this);
+    });
+    container.appendChild(item);
+  }
+}
+
+async function toggleExcludedTrack(trackJson, btn) {
+  const track = JSON.parse(trackJson);
+  const idx = excludedTracks.findIndex(t => t.id === track.id);
+  if (idx >= 0) {
+    excludedTracks.splice(idx, 1);
+    btn.textContent = 'Sperren';
+  } else {
+    excludedTracks.push(track);
+    btn.textContent = 'Entsperren';
+  }
+  await saveExcludedTracks();
+  renderExcludedTracks();
+}
+
+async function removeExcludedTrack(id) {
+  excludedTracks = excludedTracks.filter(t => t.id !== id);
+  await saveExcludedTracks();
+  renderExcludedTracks();
+  document.querySelectorAll('#track-search-results .show-item').forEach(item => {
+    const data = JSON.parse(item.dataset.trackJson || '{}');
+    if (data.id === id) item.querySelector('button').textContent = 'Sperren';
+  });
+}
+
+// ── Excluded Playlists ────────────────────────────────────────────────────────
+
+let excludedPlaylistIds = [];
+
+async function loadExcludedPlaylists() {
+  const data = await fetch('/api/excluded-playlists').then(r => r.json());
+  excludedPlaylistIds = data.playlists || [];
+  renderExcludedPlaylists();
+}
+
+function renderExcludedPlaylists() {
+  const list = document.getElementById('excluded-playlists-list');
+  const divider = document.getElementById('excluded-playlists-divider');
+  const label = document.getElementById('excluded-playlists-label');
+  list.innerHTML = '';
+  if (!excludedPlaylistIds.length) {
+    divider.style.display = 'none';
+    label.style.display = 'none';
+    return;
+  }
+  divider.style.display = '';
+  label.style.display = '';
+  for (const pl of excludedPlaylistIds) {
+    const item = document.createElement('div');
+    item.className = 'show-item';
+    item.innerHTML = `
+      <img src="${esc(pl.image_url || '')}" alt="" onerror="this.style.display='none'" />
+      <div class="show-info">
+        <div class="show-name">${esc(pl.name)}</div>
+        <div class="show-pub">${esc(pl.owner || '')} · ${pl.track_count ?? ''} Songs</div>
+      </div>
+      <button class="btn btn-outline" onclick="removeExcludedPlaylist('${esc(pl.id)}')">Entfernen</button>`;
+    list.appendChild(item);
+  }
+}
+
+async function saveExcludedPlaylists() {
+  await fetch('/api/excluded-playlists', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ playlist_ids: excludedPlaylistIds }),
+  });
+}
+
+async function searchExcludedPlaylists() {
+  const q = document.getElementById('playlist-query').value.trim();
+  if (!q) return;
+  const container = document.getElementById('playlist-search-results');
+  container.innerHTML = '<span class="spinner"></span>';
+  const data = await fetch('/api/playlists/search?q=' + encodeURIComponent(q)).then(r => r.json());
+  const playlists = data.playlists || [];
+  if (!playlists.length) {
+    container.innerHTML = '<p class="no-results">Keine Ergebnisse gefunden.</p>';
+    return;
+  }
+  container.innerHTML = '';
+  for (const pl of playlists) {
+    const alreadyBlocked = excludedPlaylistIds.some(p => p.id === pl.id);
+    const item = document.createElement('div');
+    item.className = 'show-item';
+    item.dataset.plJson = JSON.stringify(pl);
+    item.innerHTML = `
+      <img src="${esc(pl.image_url || '')}" alt="" onerror="this.style.display='none'" />
+      <div class="show-info">
+        <div class="show-name">${esc(pl.name)}</div>
+        <div class="show-pub">${esc(pl.owner || '')} · ${pl.track_count ?? ''} Songs</div>
+      </div>
+      <button class="btn btn-outline">${alreadyBlocked ? 'Entsperren' : 'Sperren'}</button>`;
+    item.querySelector('button').addEventListener('click', function() {
+      toggleExcludedPlaylist(item.dataset.plJson, this);
+    });
+    container.appendChild(item);
+  }
+}
+
+async function toggleExcludedPlaylist(plJson, btn) {
+  const pl = JSON.parse(plJson);
+  const idx = excludedPlaylistIds.findIndex(p => p.id === pl.id);
+  if (idx >= 0) {
+    excludedPlaylistIds.splice(idx, 1);
+    btn.textContent = 'Sperren';
+  } else {
+    excludedPlaylistIds.push(pl);
+    btn.textContent = 'Entsperren';
+  }
+  await saveExcludedPlaylists();
+  renderExcludedPlaylists();
+}
+
+async function removeExcludedPlaylist(id) {
+  excludedPlaylistIds = excludedPlaylistIds.filter(p => p.id !== id);
+  await saveExcludedPlaylists();
+  renderExcludedPlaylists();
+  document.querySelectorAll('#playlist-search-results .show-item').forEach(item => {
+    const data = JSON.parse(item.dataset.plJson || '{}');
+    if (data.id === id) item.querySelector('button').textContent = 'Sperren';
   });
 }
 
