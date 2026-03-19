@@ -4,13 +4,10 @@ services:
     ports:
       - "8080:8000"
     volumes:
-      - spoti_data:/data
+      - ./data:/data
     environment:
       - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID}
       - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET}
       - SPOTIFY_REDIRECT_URI=${SPOTIFY_REDIRECT_URI}
       - DATA_DIR=/data
     restart: unless-stopped
-
-volumes:
-  spoti_data:
