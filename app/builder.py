@@ -1,7 +1,6 @@
 """Assembles the Daily Drive playlist from tracks and podcast episodes."""
 from __future__ import annotations
 
-import random
 from datetime import date, datetime, timezone
 from random import Random
 
@@ -102,9 +101,25 @@ def build_playlist() -> dict:
     # Deduplicate against top tracks
     rec_tracks = [u for u in rec_tracks if u not in seen]
 
-    # Combine music tracks and shuffle slightly for freshness
+    # Combine and shuffle (day-seeded for daily consistency)
     music_uris = top_tracks + rec_tracks
-    random.shuffle(music_uris)
+    day_rng.shuffle(music_uris)
+
+    # Fallback 1: popular tracks from the user's own top artists
+    if len(music_uris) < total_tracks:
+        pool_seen = set(music_uris)
+        extra = sp_api.get_top_artist_tracks(
+            sp, limit=(total_tracks - len(music_uris)) * 2, rng=day_rng
+        )
+        extra = [u for u in extra if u not in pool_seen]
+        music_uris.extend(extra)
+
+    # Fallback 2: recently played tracks
+    if len(music_uris) < total_tracks:
+        pool_seen = set(music_uris)
+        recent = sp_api.get_recently_played(sp, limit=50)
+        recent = [u for u in recent if u not in pool_seen]
+        music_uris.extend(recent)
 
     # Apply filters BEFORE truncating so excluded tracks don't shrink the playlist
     excluded_artist_ids: set[str] = {a["id"] for a in config.get("excluded_artists", [])}
