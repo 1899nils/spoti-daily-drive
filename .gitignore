@@ -1,0 +1,17 @@
+# Persisted app data (config, tokens) — must NOT be committed
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+
+# Environment
+.env
+
+# IDE
+.vscode/
+.idea/
