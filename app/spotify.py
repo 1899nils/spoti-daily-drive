@@ -91,6 +91,49 @@ def get_similar_tracks(
     return collected[:limit]
 
 
+def get_recently_played(sp: spotipy.Spotify, limit: int = 50) -> list[str]:
+    """Return URIs of recently played tracks, deduplicated (max 50)."""
+    try:
+        results = sp.current_user_recently_played(limit=min(limit, 50))
+    except Exception:
+        return []
+    seen: set[str] = set()
+    tracks: list[str] = []
+    for item in results.get("items", []):
+        uri = item["track"]["uri"]
+        if uri not in seen:
+            seen.add(uri)
+            tracks.append(uri)
+    return tracks
+
+
+def get_top_artist_tracks(
+    sp: spotipy.Spotify, limit: int = 50, rng: random.Random | None = None
+) -> list[str]:
+    """Return track URIs from the user's own top artists (their popular songs)."""
+    try:
+        result = sp.current_user_top_artists(limit=10, time_range="medium_term")
+        artists = result["items"]
+    except Exception:
+        return []
+    if rng:
+        rng.shuffle(artists)
+    seen: set[str] = set()
+    tracks: list[str] = []
+    for artist in artists:
+        try:
+            top = sp.artist_top_tracks(artist["id"])
+            for t in top["tracks"]:
+                if t["uri"] not in seen:
+                    seen.add(t["uri"])
+                    tracks.append(t["uri"])
+        except Exception:
+            continue
+    if rng:
+        rng.shuffle(tracks)
+    return tracks[:limit]
+
+
 def search_shows(sp: spotipy.Spotify, query: str, limit: int = 10) -> list[dict[str, str]]:
     """Search for podcast shows and return [{id, name, publisher, image_url}]."""
     results = sp.search(q=query, type="show", limit=limit, market="from_token")
