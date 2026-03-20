@@ -105,6 +105,11 @@ def build_playlist() -> dict:
     music_uris = top_tracks + rec_tracks
     day_rng.shuffle(music_uris)
 
+    # Sort by energy arc for a natural Spotify-like flow
+    features = sp_api.get_audio_features(sp, music_uris)
+    if features:
+        music_uris = sp_api.sort_by_energy_arc(music_uris, features, day_rng)
+
     # Fallback 1: popular tracks from the user's own top artists
     if len(music_uris) < total_tracks:
         pool_seen = set(music_uris)
@@ -165,6 +170,16 @@ def build_playlist() -> dict:
     )
 
     sp_api.replace_playlist_tracks(sp, playlist_id, final_uris)
+
+    # Update playlist description with today's date and track count
+    today_str = date.today().strftime("%-d. %B %Y")
+    description = f"Made for you · {today_str} · {len(music_uris)} Songs"
+    sp_api.update_playlist_details(sp, playlist_id, config["playlist_name"], description)
+
+    # Generate and upload 2x2 album art collage
+    cover = sp_api.generate_cover_collage(sp, music_uris)
+    if cover:
+        sp_api.upload_cover(sp, playlist_id, cover)
 
     # Persist playlist ID and last build time
     config["playlist_id"] = playlist_id
