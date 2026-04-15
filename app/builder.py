@@ -54,6 +54,9 @@ def build_playlist() -> dict:
 
     sfm_user_id: str | None = config.get("statsfm_user_id")
 
+    # Track cooldown: exclude tracks used in recent builds to force daily variety
+    recent_track_ids: set[str] = set(config.get("recent_track_ids", []))
+
     seen: set[str] = set()
     top_tracks: list[str] = []
 
@@ -61,38 +64,62 @@ def build_playlist() -> dict:
     pool_size = min(top_count * 3, 50)
 
     if sfm_user_id:
-        # Primary source: stats.fm — sorted by actual stream count
-        recent = sfm_api.get_top_tracks(sfm_user_id, range="months", limit=pool_size)
-        alltime = sfm_api.get_top_tracks(sfm_user_id, range="lifetime", limit=pool_size)
+        # Primary source: stats.fm — fetch 3 ranges for maximum pool diversity
+        sfm_weeks = sfm_api.get_top_tracks(sfm_user_id, range="weeks", limit=pool_size)
+        sfm_months = sfm_api.get_top_tracks(sfm_user_id, range="months", limit=pool_size)
+        sfm_lifetime = sfm_api.get_top_tracks(sfm_user_id, range="lifetime", limit=pool_size)
 
-        # Build interleaved pool, then daily-random sample
+        # Build interleaved pool (weeks/months/lifetime round-robin, then remainders)
         pool: list[str] = []
-        for a, b in zip(recent, alltime):
-            for uri in (a, b):
+        for a, b, c in zip(sfm_weeks, sfm_months, sfm_lifetime):
+            for uri in (a, b, c):
                 if uri not in seen:
                     seen.add(uri)
                     pool.append(uri)
-        for uri in recent + alltime:
+        for uri in sfm_weeks + sfm_months + sfm_lifetime:
             if uri not in seen:
                 seen.add(uri)
                 pool.append(uri)
-        top_tracks = day_rng.sample(pool, min(top_count, len(pool)))
+
+        # Cooldown: prefer tracks not used recently; stale tracks fill remaining slots
+        fresh = [u for u in pool if u.split(":")[-1] not in recent_track_ids]
+        stale = [u for u in pool if u.split(":")[-1] in recent_track_ids]
+        sample_size = min(top_count, len(pool))
+        fresh_count = min(sample_size, len(fresh))
+        stale_needed = max(0, sample_size - fresh_count)
+        top_tracks = (
+            day_rng.sample(fresh, fresh_count)
+            + day_rng.sample(stale, min(stale_needed, len(stale)))
+        )
+        day_rng.shuffle(top_tracks)
     else:
-        # Fallback: Spotify's own top tracks (no stream counts)
+        # Fallback: Spotify's own top tracks — fetch all 3 time ranges for more diversity
         short_term = sp_api.get_top_tracks(sp, "short_term", limit=pool_size)
+        medium_term = sp_api.get_top_tracks(sp, "medium_term", limit=pool_size)
         long_term = sp_api.get_top_tracks(sp, "long_term", limit=pool_size)
 
         pool = []
-        for a, b in zip(short_term, long_term):
-            for uri in (a, b):
+        for a, b, c in zip(short_term, medium_term, long_term):
+            for uri in (a, b, c):
                 if uri not in seen:
                     seen.add(uri)
                     pool.append(uri)
-        for uri in short_term + long_term:
+        for uri in short_term + medium_term + long_term:
             if uri not in seen:
                 seen.add(uri)
                 pool.append(uri)
-        top_tracks = day_rng.sample(pool, min(top_count, len(pool)))
+
+        # Cooldown: same logic as stats.fm path
+        fresh = [u for u in pool if u.split(":")[-1] not in recent_track_ids]
+        stale = [u for u in pool if u.split(":")[-1] in recent_track_ids]
+        sample_size = min(top_count, len(pool))
+        fresh_count = min(sample_size, len(fresh))
+        stale_needed = max(0, sample_size - fresh_count)
+        top_tracks = (
+            day_rng.sample(fresh, fresh_count)
+            + day_rng.sample(stale, min(stale_needed, len(stale)))
+        )
+        day_rng.shuffle(top_tracks)
 
     seen = set(top_tracks)  # update seen to only the selected tracks
 
@@ -184,6 +211,14 @@ def build_playlist() -> dict:
     # Persist playlist ID and last build time
     config["playlist_id"] = playlist_id
     config["last_build"] = datetime.now(timezone.utc).isoformat()
+
+    # Update track cooldown history: keep a rolling window of ~3 builds worth of IDs
+    # so the next build prefers tracks not played recently
+    used_ids = [u.split(":")[-1] for u in music_uris if u.startswith("spotify:track:")]
+    used_set = set(used_ids)
+    existing_history = [tid for tid in config.get("recent_track_ids", []) if tid not in used_set]
+    config["recent_track_ids"] = (used_ids + existing_history)[: total_tracks * 3]
+
     save_config(config)
 
     return {
