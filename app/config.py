@@ -21,6 +21,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "excluded_artists": [],
     "excluded_tracks": [],
     "excluded_playlist_ids": [],
+    "recent_track_ids": [],
 }
 
 
