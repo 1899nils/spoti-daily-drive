@@ -132,11 +132,6 @@ def build_playlist() -> dict:
     music_uris = top_tracks + rec_tracks
     day_rng.shuffle(music_uris)
 
-    # Sort by energy arc for a natural Spotify-like flow
-    features = sp_api.get_audio_features(sp, music_uris)
-    if features:
-        music_uris = sp_api.sort_by_energy_arc(music_uris, features, day_rng)
-
     # Fallback 1: popular tracks from the user's own top artists
     if len(music_uris) < total_tracks:
         pool_seen = set(music_uris)
@@ -149,9 +144,24 @@ def build_playlist() -> dict:
     # Fallback 2: recently played tracks
     if len(music_uris) < total_tracks:
         pool_seen = set(music_uris)
-        recent = sp_api.get_recently_played(sp, limit=50)
-        recent = [u for u in recent if u not in pool_seen]
-        music_uris.extend(recent)
+        recent_played = sp_api.get_recently_played(sp, limit=50)
+        recent_played = [u for u in recent_played if u not in pool_seen]
+        music_uris.extend(recent_played)
+
+    # Fetch audio features for the full pool (including fallback tracks)
+    features = sp_api.get_audio_features(sp, music_uris)
+
+    # Filter out audiobooks, Hörspiele, spoken word: speechiness > 0.66 means
+    # the track is "probably entirely spoken words" per Spotify's documentation
+    if features:
+        music_uris = [
+            u for u in music_uris
+            if features.get(u, {}).get("speechiness", 0) <= 0.66
+        ]
+
+    # Sort by energy arc for a natural Spotify-like flow
+    if features:
+        music_uris = sp_api.sort_by_energy_arc(music_uris, features, day_rng)
 
     # Apply filters BEFORE truncating so excluded tracks don't shrink the playlist
     excluded_artist_ids: set[str] = {a["id"] for a in config.get("excluded_artists", [])}
